@@ -1,8 +1,10 @@
 package decoders.Nemesys
 
+import decoders.*
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.random.Random
 
 class NemesysParser {
     // this finds all segment boundaries and returns a nemesys object that can be called to get the html code
@@ -11,15 +13,282 @@ class NemesysParser {
         return NemesysParsedMessage(segments, bytes, msgIndex)
     }
 
+    // parse bytewise and see every byte as one field without using Nemesys and without using Postprocessing
+    fun parseBytewiseWithoutOptimization(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
+        val segments = setBytewiseSegmentBoundaries(bytes)
+
+        return NemesysParsedMessage(segments, bytes, msgIndex)
+    }
+
+    // parse bytewise and see every byte as one field without using Nemesys
+    fun parseBytewiseWithOptimization(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
+        val segments = setBytewiseSegmentBoundariesWithOptimization(bytes)
+
+        return NemesysParsedMessage(segments, bytes, msgIndex)
+    }
+
+    // created my own byte wise parser using a sliding window
+    fun parseSmartWithoutOptimization(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
+        val segments = mutableListOf<NemesysSegment>()
+        var index = 0
+
+        // TODO try out different decoders
+        val decoders = listOf(Utf8Decoder, Utf16Decoder, IEEE754, ProtobufParser, GenericTLV) // try these decoders
+        val minWindow = 4
+        val maxWindow = 32
+        val threshold = 0.9 // set confidence score // TODO try different scores and take the better one
+
+        while (index < bytes.size) {
+            var bestConfidence = 0.0
+            var bestDecoder: ByteWitchDecoder? = null
+            var bestWindowSize = -1
+
+            // sliding window approach
+            for (windowSize in minWindow..maxWindow) {
+                val end = index + windowSize
+                if (end > bytes.size) break
+                val window = bytes.sliceArray(index until end)
+
+                for (decoder in decoders) {
+                    val confidence = decoder.confidence(window)
+                    if (confidence > bestConfidence) {
+                        bestConfidence = confidence
+                        bestDecoder = decoder
+                        bestWindowSize = windowSize
+                    }
+                }
+            }
+
+            // set field boundary based on the best decoder
+            if (bestDecoder != null && bestConfidence >= threshold) {
+                segments.add(NemesysSegment(index, NemesysUtil.setNemesysFieldfromDecoder(bestDecoder)))
+                index += bestWindowSize
+            } else {
+                // Fallback: bytewise segmentation if no decoder could be found
+                segments.add(NemesysSegment(index, NemesysField.UNKNOWN))
+                index += 1
+            }
+        }
+
+        return NemesysParsedMessage(segments, bytes, msgIndex)
+    }
+
+
+    // created my own byte wise parser using a sliding window - doesn't include pre processing
+    fun parseSmartWithHalfOptimization(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
+        val segments = mutableListOf<NemesysSegment>()
+        var index = 0
+
+        // TODO try out different decoders
+        val decoders = listOf(Utf8Decoder, Utf16Decoder, IEEE754, ProtobufParser, GenericTLV) // try these decoders
+        val minWindow = 4
+        val maxWindow = 32
+        val threshold = 0.9 // set confidence score // TODO try different scores and take the better one
+
+        while (index < bytes.size) {
+            var bestConfidence = 0.0
+            var bestDecoder: ByteWitchDecoder? = null
+            var bestWindowSize = -1
+
+            for (windowSize in minWindow..maxWindow) {
+                val end = index + windowSize
+                if (end > bytes.size) break
+                val window = bytes.sliceArray(index until end)
+
+                for (decoder in decoders) {
+                    val confidence = decoder.confidence(window)
+                    if (confidence > bestConfidence) {
+                        bestConfidence = confidence
+                        bestDecoder = decoder
+                        bestWindowSize = windowSize
+                    }
+                }
+            }
+
+            // set field boundary based on the best decoder
+            if (bestDecoder != null && bestConfidence >= threshold) {
+                val fieldType = NemesysUtil.setNemesysFieldfromDecoder(bestDecoder)
+                segments.add(NemesysSegment(index, fieldType))
+                index += bestWindowSize
+            } else {
+                // Fallback: bytewise segmentation if no decoder could be found
+                segments.add(NemesysSegment(index, NemesysField.UNKNOWN))
+                index += 1
+            }
+        }
+
+        // transform NemesysSegment boundaries to a list
+        val boundaries = segments.map { it.offset }.toMutableList()
+        val improvedSegments = postProcessing(boundaries, bytes) // do post processing
+
+        return NemesysParsedMessage(improvedSegments, bytes, msgIndex)
+    }
+
+    fun parseSmartWithFullOptimization(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
+        val decoders = listOf(Utf8Decoder, Utf16Decoder, IEEE754, ProtobufParser, GenericTLV)
+        val minWindow = 4
+        val maxWindow = 32
+        val threshold = 0.9
+
+        val taken = BooleanArray(bytes.size) { false }
+
+        // pre processing
+        val fixedSegments = detectLengthPrefixedFieldsPreProcessing(bytes, taken).toMutableList()
+
+        // find free byt ranges
+        val freeRanges = mutableListOf<Pair<Int, Int>>()
+        var currentStart: Int? = null
+        for (i in bytes.indices) {
+            if (!taken[i]) {
+                if (currentStart == null) currentStart = i
+            } else {
+                if (currentStart != null) {
+                    freeRanges.add(currentStart to i)
+                    currentStart = null
+                }
+            }
+        }
+        if (currentStart != null) {
+            freeRanges.add(currentStart to bytes.size)
+        }
+
+        // iterate over free bytes
+        val smartSegments = mutableListOf<NemesysSegment>()
+        for ((start, end) in freeRanges) {
+            var index = start
+            while (index < end) {
+                var bestConfidence = 0.0
+                var bestDecoder: ByteWitchDecoder? = null
+                var bestWindowSize = -1
+
+                // use sliding windows appraoch
+                for (windowSize in minWindow..maxWindow) {
+                    val actualEnd = index + windowSize
+                    if (actualEnd > end) break
+                    val window = bytes.sliceArray(index until actualEnd)
+
+                    for (decoder in decoders) {
+                        val confidence = decoder.confidence(window)
+                        if (confidence > bestConfidence) {
+                            bestConfidence = confidence
+                            bestDecoder = decoder
+                            bestWindowSize = windowSize
+                        }
+                    }
+                }
+
+                // set boundaries based on the best decoder
+                if (bestDecoder != null && bestConfidence >= threshold) {
+                    smartSegments.add(
+                        NemesysSegment(
+                            index,
+                            NemesysUtil.setNemesysFieldfromDecoder(bestDecoder)
+                        )
+                    )
+                    for (i in index until index + bestWindowSize) taken[i] = true
+                    index += bestWindowSize
+                } else {
+                    smartSegments.add(NemesysSegment(index, NemesysField.UNKNOWN))
+                    taken[index] = true
+                    index += 1
+                }
+            }
+        }
+
+        // for post processing
+        val combinedSegments = (fixedSegments + smartSegments).sortedBy { it.offset }.distinctBy { it.offset }
+        val boundaries = combinedSegments.map { it.offset }.toMutableList()
+        val improvedSegments = postProcessing(boundaries, bytes)
+
+        return NemesysParsedMessage(improvedSegments, bytes, msgIndex)
+    }
+
+
+
+    // create a random parser - just for comparison reasons
+    fun parseRandom(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
+        val segments = mutableListOf<NemesysSegment>()
+
+        // set seed for randomizer
+        val seed = bytes.contentHashCode()
+        val random = Random(seed)
+
+        var index = 0
+        while (index < bytes.size) {
+            segments.add(NemesysSegment(index, NemesysField.UNKNOWN))
+
+            // choose a random field length betwwen 1 and 8 bytes
+            val fieldLength = 1 + random.nextInt(8)
+            index += fieldLength
+        }
+
+        return NemesysParsedMessage(segments, bytes, msgIndex)
+    }
+
+
+    // every byte is one field. don't use postprocessing but pre processing
+    private fun setBytewiseSegmentBoundaries(bytes: ByteArray): List<NemesysSegment>{
+        val taken = BooleanArray(bytes.size) { false }
+
+        // preProcessing to detect length fields
+        val fixedSegments = detectLengthPrefixedFieldsPreProcessing(bytes, taken)
+
+        val dynamicSegments = mutableListOf<NemesysSegment>()
+        for (i in bytes.indices) { // go through each byte
+            if (!taken[i]) {
+                val slice = byteArrayOf(bytes[i])
+                // do some post processing to merge bytes together
+                val type = postProcessing(mutableListOf(0), slice).firstOrNull()?.fieldType ?: NemesysField.UNKNOWN
+                dynamicSegments.add(NemesysSegment(i, type))
+            }
+        }
+
+        return (fixedSegments + dynamicSegments).sortedBy { it.offset }.distinctBy { it.offset }
+    }
+
+    // every byte is one field. only use pre- and postprocessing to merge bytes together
+    private fun setBytewiseSegmentBoundariesWithOptimization(bytes: ByteArray): List<NemesysSegment>{
+        val taken = BooleanArray(bytes.size) { false }
+
+        // preProcessing to detect length fields
+        val fixedSegments = detectLengthPrefixedFieldsPreProcessing(bytes, taken)
+
+        // find free ranges
+        val freeRanges = mutableListOf<Pair<Int, Int>>()
+        var currentStart: Int? = null
+        for (i in bytes.indices) {
+            if (!taken[i]) {
+                if (currentStart == null) currentStart = i
+            } else {
+                if (currentStart != null) {
+                    freeRanges.add(currentStart to i)
+                    currentStart = null
+                }
+            }
+        }
+        if (currentStart != null) {
+            freeRanges.add(currentStart to bytes.size)
+        }
+
+        // set field boundaries after every byte
+        val dynamicSegments = mutableListOf<NemesysSegment>()
+        for ((start, end) in freeRanges) {
+            val boundaries = (start..end).toMutableList()
+            val segments = postProcessing(boundaries, bytes)
+            dynamicSegments.addAll(segments)
+        }
+
+        return (fixedSegments + dynamicSegments).sortedBy { it.offset }.distinctBy { it.offset }
+    }
+
+
     // count how often every segment exists
     fun countSegmentValues(messages: List<NemesysParsedMessage>, minSegmentLength: Int = 2): Map<ByteArray, Int> {
         val segmentValueCounts = mutableMapOf<ByteArray, Int>()
 
         for (msg in messages) {
             for ((index, segment) in msg.segments.withIndex()) {
-                val start = segment.offset
-                val end = msg.segments.getOrNull(index + 1)?.offset ?: msg.bytes.size
-                val segmentBytes = msg.bytes.sliceArray(start until end)
+                val segmentBytes = msg.bytes.sliceArray(NemesysUtil.getByteRange(msg, index))
 
                 // filter some segments
                 if (segmentBytes.size < minSegmentLength) continue
@@ -66,9 +335,7 @@ class NemesysParser {
                     continue
                 }
 
-                val start = curr.offset
-                val end = msg.segments.getOrNull(i + 1)?.offset ?: msg.bytes.size
-                val segmentBytes = msg.bytes.sliceArray(start until end)
+                val segmentBytes = msg.bytes.sliceArray(NemesysUtil.getByteRange(msg, i))
 
                 var splitOffsets = mutableSetOf<Int>()
                 splitOffsets.add(0) // segment start
@@ -99,7 +366,7 @@ class NemesysParser {
                 val sortedOffsets = splitOffsets.toList().sorted().distinct()
                 for (j in 0 until sortedOffsets.size - 1) {
                     val relativeOffset = sortedOffsets[j]
-                    newSegments.add(NemesysSegment(start + relativeOffset, curr.fieldType))
+                    newSegments.add(NemesysSegment(curr.offset + relativeOffset, curr.fieldType))
                 }
 
                 i++
@@ -466,6 +733,7 @@ class NemesysParser {
 
             for (i in minIndex..< maxIndex) {
                 val delta = kotlin.math.abs(deltaBC[i] - deltaBC[i+1])
+
                 if (delta > maxDeltaValue) {
                     maxDeltaValue = delta
                     maxDeltaIndex = i + 2
@@ -948,7 +1216,7 @@ class NemesysParser {
     }
 }
 
-// this object is used as a tool for nemesys parser and renderer
+// this object is used as a tool for nemesys classes
 object NemesysUtil {
     // get actual length given the bytes and endian
     fun tryParseLength(
@@ -978,6 +1246,22 @@ object NemesysUtil {
             }
         } catch (e: IndexOutOfBoundsException) {
             null
+        }
+    }
+
+    // to detect the range of a segment
+    fun getByteRange(message: NemesysParsedMessage, index: Int): IntRange {
+        val start = message.segments[index].offset
+        val end = message.segments.getOrNull(index + 1)?.offset ?: message.bytes.size
+        return start until end
+    }
+
+    fun setNemesysFieldfromDecoder(decoder: ByteWitchDecoder): NemesysField {
+        return when (decoder.name.lowercase()) {
+            "utf8" -> NemesysField.STRING
+            "utf16" -> NemesysField.UNKNOWN // STRING_UTF16
+            "ieee754" -> NemesysField.UNKNOWN // FLOAT
+            else -> NemesysField.UNKNOWN
         }
     }
 }
