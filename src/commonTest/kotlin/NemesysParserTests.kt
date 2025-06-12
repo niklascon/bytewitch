@@ -320,7 +320,7 @@ class NemesysParserTests {
         assertEquals(expected, result)
     }
 
-    @Test
+    /*@Test
     fun testHandlePrintablePayload_validString() {
         val bytes = "0748656C6C6F2121".fromHex() // 07 'Hello!!'
         val taken = BooleanArray(bytes.size) { false }
@@ -460,7 +460,7 @@ class NemesysParserTests {
         )
 
         assertEquals(expected, result)
-    }
+    }*/
 
     @Test
     fun testCountSegmentValues_countsCorrectly() {

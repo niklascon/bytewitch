@@ -7,7 +7,7 @@ import kotlin.math.ln
 class NemesysParser {
     // this finds all segment boundaries and returns a nemesys object that can be called to get the html code
     fun parse(bytes: ByteArray, msgIndex: Int): NemesysParsedMessage {
-        val segments = findSegmentBoundaries(bytes)
+        val segments = findSegmentBoundariesWithPostProcessing(bytes)
         return NemesysParsedMessage(segments, bytes, msgIndex)
     }
 
@@ -228,12 +228,12 @@ class NemesysParser {
         return -1
     }
 
-    // find segmentation boundaries
-    private fun findSegmentBoundaries(bytes: ByteArray): List<NemesysSegment> {
+    // find segmentation boundaries. This function in particular uses detectLengthPrefixedFields in a PRE processing step
+    private fun findSegmentBoundariesWithPreProcessing(bytes: ByteArray): List<NemesysSegment> {
         val taken = BooleanArray(bytes.size) { false } // list of bytes that have already been assigned
 
         // pre processing
-        val fixedSegments = detectLengthPrefixedFields(bytes, taken)
+        val fixedSegments = detectLengthPrefixedFieldsPreProcessing(bytes, taken)
 
         // find all bytes without a corresponding segment
         val freeRanges = mutableListOf<Pair<Int, Int>>()
@@ -287,6 +287,49 @@ class NemesysParser {
 
         // combine segments together
         return (fixedSegments + dynamicSegments).sortedBy { it.offset }.distinctBy { it.offset }
+    }
+
+
+    // find segmentation boundaries. This function in particular uses detectLengthPrefixedFields in a PRE processing step
+    private fun findSegmentBoundariesWithPostProcessing(bytes: ByteArray): List<NemesysSegment> {
+        val dynamicSegments = mutableListOf<NemesysSegment>()
+
+        // TODO make this more beautiful
+        val freeRanges = listOf(0 to bytes.size)
+
+        for ((start, end) in freeRanges) {
+            val slice = bytes.sliceArray(start until end)
+            val deltaBC = computeDeltaBC(slice)
+
+            // sigma should depend on the field length: Nemesys paper on page 5
+            val smoothed = applyGaussianFilter(deltaBC, 0.6)
+
+            // Safety check (it mostly enters if the bytes are too short)
+            if (smoothed.isEmpty()) {
+                dynamicSegments.add(NemesysSegment(start, NemesysField.UNKNOWN))
+                continue
+            }
+
+            // find extrema of smoothedDeltaBC
+            val extrema = findExtremaInList(smoothed)
+
+            // find all rising points from minimum to maximum in extrema list
+            val rising = findRisingDeltas(extrema)
+
+            // find inflection point in risingDeltas -> those are considered as boundaries
+            val inflection = findInflectionPoints(rising, deltaBC)
+
+            // merge consecutive text segments together
+            // val boundaries = mergeCharSequences(preBoundaries, bytes)
+            var improved = postProcessing(inflection.toMutableList(), slice)
+
+            // add relativeStart to the boundaries
+            for ((relativeStart, type) in improved) {
+                dynamicSegments.add(NemesysSegment(start + relativeStart, type))
+            }
+        }
+
+        return dynamicSegments.sortedBy { it.offset }.distinctBy { it.offset }
     }
 
 
@@ -496,6 +539,7 @@ class NemesysParser {
     // try to improve boundaries by shifting them a bit
     private fun postProcessing(boundaries: MutableList<Int>, bytes: ByteArray): List<NemesysSegment> {
         var result = mergeCharSequences(boundaries, bytes)
+        result = detectLengthPrefixedFieldsPostProcessing(result, bytes)
         result = slideCharWindow(result, bytes)
         result = nullByteTransitions(result, bytes)
         result = entropyMerge(result, bytes)
@@ -717,8 +761,8 @@ class NemesysParser {
         return ratio < 0.33
     }
 
-    // handle length field payload and add it to the result
-    fun handlePrintablePayload(
+    // handle length field payload and add it to the result. This function in particul was for pre processing
+    fun handlePrintablePayloadPreProcessing(
         bytes: ByteArray, taken: BooleanArray, result: MutableList<NemesysSegment>,
         offset: Int, lengthFieldSize: Int, payloadLength: Int, bigEndian: Boolean
     ): Int? {
@@ -749,8 +793,47 @@ class NemesysParser {
         return payloadEnd
     }
 
-    // used to detect length fields and the corresponding payload
-    fun checkLengthPrefixedSegment(
+
+    // handle length field payload and add it to the result. This function in particul was for post processing
+    private fun handlePrintablePayloadPostProcessing(
+        result: MutableList<NemesysSegment>,
+        bytes: ByteArray,
+        offset: Int,
+        lengthFieldSize: Int,
+        payloadLength: Int,
+        bigEndian: Boolean
+    ): Int {
+        // check if payload is printable
+        val payloadStart = offset + lengthFieldSize
+        val payloadEnd = payloadStart + payloadLength
+        if (payloadEnd > bytes.size) return offset + 1
+        val payload = bytes.sliceArray(payloadStart until payloadEnd)
+        if (!payload.all { isPrintableChar(it) }) return offset + 1
+
+        // check if all following three bytes are also printable
+        val lookaheadEnd = minOf(payloadEnd + 3, bytes.size)
+        if (payloadEnd < lookaheadEnd) {
+            val lookahead = bytes.sliceArray(payloadEnd until lookaheadEnd)
+            if (lookahead.all { isPrintableChar(it) }) {
+                return offset + 1
+            }
+        }
+
+        // finally add fields
+        result.add(
+            NemesysSegment(
+                offset,
+                if (bigEndian) NemesysField.PAYLOAD_LENGTH_BIG_ENDIAN else NemesysField.PAYLOAD_LENGTH_LITTLE_ENDIAN
+            )
+        )
+        result.add(NemesysSegment(payloadStart, NemesysField.STRING_PAYLOAD))
+
+        return payloadEnd
+    }
+
+
+    // used to detect length fields and the corresponding payload. This function in particular is used for pre processing
+    fun checkLengthPrefixedSegmentPreProcessing(
         bytes: ByteArray,
         taken: BooleanArray,
         result: MutableList<NemesysSegment>,
@@ -769,32 +852,32 @@ class NemesysParser {
         if (payloadEnd > bytes.size || length < 3) return null
         if ((offset until payloadEnd).any { taken[it] }) return null
 
-        return handlePrintablePayload(bytes, taken, result, offset, lengthFieldSize, length, bigEndian)
+        return handlePrintablePayloadPreProcessing(bytes, taken, result, offset, lengthFieldSize, length, bigEndian)
     }
 
 
-    // detect length prefixes and the corresponding payload
-    fun detectLengthPrefixedFields(bytes: ByteArray, taken: BooleanArray): List<NemesysSegment> {
+    // detect length prefixes and the corresponding payload. This function particular does this in a PRE Processing step
+    fun detectLengthPrefixedFieldsPreProcessing(bytes: ByteArray, taken: BooleanArray): List<NemesysSegment> {
         val segments = mutableListOf<NemesysSegment>()
         var i = 0
 
         while (i < bytes.size - 1) {
             // Try 2-byte length field (big endian)
-            var newIndex = checkLengthPrefixedSegment(bytes, taken, segments, i, 2, true)
+            var newIndex = checkLengthPrefixedSegmentPreProcessing(bytes, taken, segments, i, 2, true)
             if (newIndex != null) {
                 i = newIndex
                 continue
             }
 
             // Try 2-byte length field (little endian)
-            newIndex = checkLengthPrefixedSegment(bytes, taken, segments, i, 2, false)
+            newIndex = checkLengthPrefixedSegmentPreProcessing(bytes, taken, segments, i, 2, false)
             if (newIndex != null) {
                 i = newIndex
                 continue
             }
 
             // Try 1-byte length field
-            newIndex = checkLengthPrefixedSegment(bytes, taken, segments, i, 1, true)
+            newIndex = checkLengthPrefixedSegmentPreProcessing(bytes, taken, segments, i, 1, true)
             if (newIndex != null) {
                 i = newIndex
                 continue
@@ -804,6 +887,64 @@ class NemesysParser {
         }
 
         return segments.distinctBy { it.offset }.sortedBy { it.offset }
+    }
+
+
+    // used to detect length fields and the corresponding payload. This function in particular is used for post processing
+    private fun checkLengthPrefixedSegmentPostProcessing(
+        result: MutableList<NemesysSegment>,
+        bytes: ByteArray,
+        offset: Int,
+        lengthFieldSize: Int,
+        bigEndian: Boolean
+    ): Int? {
+        if (offset + lengthFieldSize >= bytes.size) return null
+
+        val length = NemesysUtil.tryParseLength(bytes, offset, lengthFieldSize, bigEndian) ?: return null
+
+        val payloadStart = offset + lengthFieldSize
+        val payloadEnd = payloadStart + length
+
+        // check bounds and collisions
+        if (payloadEnd > bytes.size || length < 3) return null
+        // if ((offset until payloadEnd).any { it in existingBoundaries }) return null
+
+        return handlePrintablePayloadPostProcessing(result, bytes, offset, lengthFieldSize, length, bigEndian)
+    }
+
+
+    // detect length prefixes and the corresponding payload. This function particular does this in a POST Processing step
+    fun detectLengthPrefixedFieldsPostProcessing(
+        segments: MutableList<NemesysSegment>,
+        bytes: ByteArray
+    ): MutableList<NemesysSegment> {
+        var i = 0 // TODO do a for loop
+        while (i < bytes.size - 1) {
+            // Try 2-byte length field (big endian)
+            var newIndex = checkLengthPrefixedSegmentPostProcessing(segments, bytes, i, 2, bigEndian = true)
+            if (newIndex != null) {
+                i = newIndex
+                continue
+            }
+
+            // Try 2-byte length field (little endian)
+            newIndex = checkLengthPrefixedSegmentPostProcessing(segments, bytes, i, 2, bigEndian = false)
+            if (newIndex != null) {
+                i = newIndex
+                continue
+            }
+
+            // Try 1-byte length field
+            newIndex = checkLengthPrefixedSegmentPostProcessing(segments, bytes, i, 1, bigEndian = true)
+            if (newIndex != null) {
+                i = newIndex
+                continue
+            }
+
+            i++
+        }
+
+        return segments
     }
 }
 
