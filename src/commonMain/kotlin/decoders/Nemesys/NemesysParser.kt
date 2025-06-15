@@ -807,7 +807,7 @@ class NemesysParser {
     // try to improve boundaries by shifting them a bit
     private fun postProcessing(boundaries: MutableList<Int>, bytes: ByteArray): List<NemesysSegment> {
         var result = mergeCharSequences(boundaries, bytes)
-        result = detectLengthPrefixedFieldsPostProcessing(result, bytes)
+        //result = detectLengthPrefixedFieldsPostProcessing(result, bytes)
         result = slideCharWindow(result, bytes)
         result = nullByteTransitions(result, bytes)
         result = entropyMerge(result, bytes)
