@@ -20,6 +20,33 @@ class TestCustomParser {
         EvaluationHelper.printFinalScore()
     }
 
+    /*
+    @Test
+    fun testMessageGroupSegmentationWithEntropy() {
+        TestMessageSamples.messageGroups.forEach { group ->
+            println("=== Testing Custom Parser Group ${group.typeId} with Entropy ===")
+
+            val emptyParsedMessages = group.messages.map { testMessage ->
+                SSFParsedMessage(emptyList(), testMessage.message, testMessage.index)
+            }
+
+            val entropyParsedMessages = SSFParser().parseEntropy(emptyParsedMessages)
+
+            group.messages.zip(entropyParsedMessages).forEach { (testMessage, parsed) ->
+                EvaluationHelper.printSegmentParsingResult(
+                    testMessage.index,
+                    testMessage.segments,
+                    parsed.segments
+                )
+            }
+
+            EvaluationHelper.printFinalScore()
+        }
+
+        assertTrue(false, "F1 score should be at least 80%")
+    }
+    */
+
     @Test
     fun testMessageGroupSegmentation() {
         TrainingMessageSamples.messageGroups.forEach { group ->
