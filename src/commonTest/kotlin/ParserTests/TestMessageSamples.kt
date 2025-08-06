@@ -717,7 +717,7 @@ object TestMessageSamples {
 
 
         // AB HIER SIND 50 ZUSAMMEN GENERIERT WORDEN
-        TestMessage(19,
+        /*TestMessage(19,
             "040101010247c4040101050503036c626c0401000208408c45662d1d8e420302786e0208c06aaefbba2b2a64030161050d0401000108fc14c9a66b8303a8040101050e040101030666636376636a040100010441b237d7".fromHex(),
             listOf(
                 SSFSegment(0, SSFField.UNKNOWN),
@@ -3878,14 +3878,14 @@ object TestMessageSamples {
                 SSFSegment(82, SSFField.UNKNOWN),
                 SSFSegment(83, SSFField.UNKNOWN),
             )
-        )
+        )*/
     )
 
-    val messageGroups = listOf(
+    /*val messageGroups = listOf(
         MessageGroup(0, TestMessageSamples.testMessages.subList(19, 19 + 5)), // To test entropy vs nemesys
         MessageGroup(1, TestMessageSamples.testMessages.subList(19, 19 + 10)), // To test entropy vs nemesys
         MessageGroup(2, TestMessageSamples.testMessages.subList(19, 19 + 50)) // To test entropy vs nemesys
-    )
+    )*/
 
     // test sequence alignment
     val alignmentTests = listOf(

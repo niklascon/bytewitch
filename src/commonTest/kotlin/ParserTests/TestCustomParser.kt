@@ -10,15 +10,40 @@ class TestCustomParser {
         return SSFParser().parse(bytes, index)
     }
 
-    @Test
+    /*@Test
     fun testSegmentation() {
-        TrainingMessageSamples.testMessages.forEachIndexed { index, testMessage ->
+        TestMessageSamples.testMessages.forEachIndexed { index, testMessage ->
             val parsed = parserForSegmentParsing(testMessage.message, index)
             EvaluationHelper.printSegmentParsingResult(index, testMessage.segments, parsed.segments)
         }
 
         EvaluationHelper.printFinalScore()
+    }*/
+
+    @Test
+    fun testSegmentation() {
+        var totalTimeMs = 0.0
+
+        TestMessageSamples.testMessages.forEachIndexed { index, testMessage ->
+            val start = kotlin.js.Date().getTime()
+            val parsed = parserForSegmentParsing(testMessage.message, index)
+            val end = kotlin.js.Date().getTime()
+            val durationMs = end - start
+            totalTimeMs += durationMs
+
+            EvaluationHelper.printSegmentParsingResult(index, testMessage.segments, parsed.segments)
+        }
+
+        val avgTime = if (TestMessageSamples.testMessages.isNotEmpty())
+            totalTimeMs / TestMessageSamples.testMessages.size
+        else 0.0
+
+        println("Total runtime: ${totalTimeMs}ms")
+
+        EvaluationHelper.printFinalScore()
     }
+
+
 
     /*
     @Test
