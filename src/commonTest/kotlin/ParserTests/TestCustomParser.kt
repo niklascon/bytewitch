@@ -3,6 +3,7 @@ package ParserTests
 import decoders.SwiftSegFinder.SSFParsedMessage
 import decoders.SwiftSegFinder.SSFParser
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class TestCustomParser {
     // choose the parser
@@ -10,7 +11,7 @@ class TestCustomParser {
         return SSFParser().parse(bytes, index)
     }
 
-    /*@Test
+    @Test
     fun testSegmentation() {
         TestMessageSamples.testMessages.forEachIndexed { index, testMessage ->
             val parsed = parserForSegmentParsing(testMessage.message, index)
@@ -18,9 +19,9 @@ class TestCustomParser {
         }
 
         EvaluationHelper.printFinalScore()
-    }*/
+    }
 
-    @Test
+    /*@Test
     fun testSegmentation() {
         var totalTimeMs = 0.0
 
@@ -34,19 +35,12 @@ class TestCustomParser {
             EvaluationHelper.printSegmentParsingResult(index, testMessage.segments, parsed.segments)
         }
 
-        val avgTime = if (TestMessageSamples.testMessages.isNotEmpty())
-            totalTimeMs / TestMessageSamples.testMessages.size
-        else 0.0
-
         println("Total runtime: ${totalTimeMs}ms")
 
         EvaluationHelper.printFinalScore()
-    }
+    }*/
 
-
-
-    /*
-    @Test
+    /*@Test
     fun testMessageGroupSegmentationWithEntropy() {
         TestMessageSamples.messageGroups.forEach { group ->
             println("=== Testing Custom Parser Group ${group.typeId} with Entropy ===")
@@ -69,22 +63,33 @@ class TestCustomParser {
         }
 
         assertTrue(false, "F1 score should be at least 80%")
-    }
-    */
+    }*/
 
-    @Test
+    /*@Test
     fun testMessageGroupSegmentation() {
-        TrainingMessageSamples.messageGroups.forEach { group ->
+        TestMessageSamples.messageGroups.forEach { group ->
+            var totalTimeMs = 0.0
+
             println("=== Testing Custom Parser Group ${group.typeId} ===")
             group.messages.forEach { testMessage ->
+                val start = kotlin.js.Date().getTime()
                 val parsed = parserForSegmentParsing(testMessage.message, testMessage.index)
+                val end = kotlin.js.Date().getTime()
+                val durationMs = end - start
+                totalTimeMs += durationMs
+
                 EvaluationHelper.printSegmentParsingResult(testMessage.index, testMessage.segments, parsed.segments)
             }
+
+            println("Total runtime: ${totalTimeMs}ms")
+
+            EvaluationHelper.printFinalScore() // TODO wenn das benutzt wird, muss in printFinalScore das assertTrue raus!!!
         }
 
-        EvaluationHelper.printFinalScore()
-    }
+        assertTrue(false, "F1 score should be at least 80%")
+    }*/
 
+    /*
     @Test
     fun testSegmentWiseSequenceAlignment() {
         for ((index, test) in TrainingMessageSamples.alignmentTests.withIndex()) {
@@ -145,6 +150,6 @@ class TestCustomParser {
         }
 
         EvaluationHelper.printFinalScore()
-    }
+    }*/
 
 }
