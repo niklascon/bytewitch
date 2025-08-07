@@ -156,8 +156,7 @@ object EvaluationHelper {
         // assertTrue(false, "Average FMS score should be at least 80%")
     }
 
-
-    fun printSequenceAlignmentResult(
+    fun printSegmentWiseSequenceAlignmentResult(
         testNumber: Int,
         messages: Map<Int, SSFParsedMessage>,
         expectedAlignments: Set<Triple<Int, Int, Pair<Int, Int>>>
@@ -194,7 +193,7 @@ object EvaluationHelper {
         val recall = tp.toDouble() / (tp + fn).coerceAtLeast(1)
         val f1 = 2 * precision * recall / (precision + recall).coerceAtLeast(1e-9)
 
-        println("----- testSequenceAlignment$testNumber -----")
+        println("----- testSegmentWiseSequenceAlignment$testNumber -----")
         println("True Positives: $tp")
         println("False Positives: $fp")
         println("False Negatives: $fn")
@@ -202,7 +201,6 @@ object EvaluationHelper {
         println("Recall: ${(recall * 100).toInt()}%")
         println("F1 Score: ${(f1 * 100).toInt()}%")
     }
-
 
     // Same as printSequenceAlignmentResult but for byte wise sequence alignment
     fun printByteWiseSequenceAlignmentResult(

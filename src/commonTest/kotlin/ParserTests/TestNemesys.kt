@@ -7,7 +7,7 @@ import kotlin.test.Test
 
 class TestNemesys {
 
-    @Test
+    /*@Test
     fun testNemesysSegmentation() {
         testMessages.forEach { actual ->
             val expected = TestMessageSamples.testMessages.firstOrNull { it.index == actual.index }
@@ -21,7 +21,7 @@ class TestNemesys {
         }
 
         EvaluationHelper.printFinalScore()
-    }
+    }*/
 
     // To compare Nemesys vs SwiftSegFinder
     val actualTestNemesysSegmentation = listOf(
