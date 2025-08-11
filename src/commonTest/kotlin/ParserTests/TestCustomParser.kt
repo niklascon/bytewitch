@@ -91,7 +91,8 @@ class TestCustomParser {
             EvaluationHelper.printSegmentWiseSequenceAlignmentResult(index, messages, test.expectedAlignments)
         }
 
-        EvaluationHelper.printFinalScore()
+        // EvaluationHelper.printFinalScore()
+        EvaluationHelper.printFinalScoreSequenceAlignment()
     }
 
     @Test
@@ -106,10 +107,12 @@ class TestCustomParser {
             EvaluationHelper.printByteWiseSequenceAlignmentResult(index, messages, test.expectedAlignments)
         }
 
-        EvaluationHelper.printFinalScore()
+        // EvaluationHelper.printFinalScore()
+        EvaluationHelper.printFinalScoreSequenceAlignment()
     }
 
-    @Test
+    // Das macht irgendwie ein Tick zu wenig Sinn und ist nicht wirklich vergleichbar
+    /*@Test
     fun testSegmentationWithSequenceAlignment() {
          for ((index, test) in TestMessageSamples.alignmentTests.withIndex()) {
             val msgA = TestMessageSamples.testMessages[test.messageAIndex]
@@ -139,6 +142,6 @@ class TestCustomParser {
         }
 
         EvaluationHelper.printFinalScore()
-    }
+    }*/
 
 }

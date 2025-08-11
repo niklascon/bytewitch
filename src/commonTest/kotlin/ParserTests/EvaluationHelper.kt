@@ -27,6 +27,10 @@ object EvaluationHelper {
     private var totalFP = 0
     private var totalFN = 0
 
+    private var totalCorrectItems = 0
+    private var totalExpectedItems = 0
+    private var totalRuntime = 0.0
+
     private val fmsScores = mutableListOf<Double>()
 
     fun printSegmentParsingResult(
@@ -136,6 +140,25 @@ object EvaluationHelper {
         assertTrue(false, "F1 score should be at least 80%")
     }
 
+    fun printFinalScoreSequenceAlignment() {
+        val accuracy = totalCorrectItems.toDouble() / totalExpectedItems.coerceAtLeast(1)
+
+        println("===== Final Evaluation =====")
+        println("Correctly aligned bytes: $totalCorrectItems / $totalExpectedItems")
+        println("Byte-level accuracy: ${(accuracy * 100).toInt()}%")
+        println("Runtime: ${totalRuntime} ms")
+        println()
+        println()
+        println()
+
+        // reset evaluation:
+        totalCorrectItems = 0
+        totalExpectedItems = 0
+        totalRuntime = 0.0
+
+        assertTrue(false, "F1 score should be at least 80%")
+    }
+
 
     fun printFinalFMSScore() {
         if (fmsScores.isEmpty()) {
@@ -156,22 +179,12 @@ object EvaluationHelper {
         // assertTrue(false, "Average FMS score should be at least 80%")
     }
 
-    fun printSegmentWiseSequenceAlignmentResult(
+    // this calculates a F1-score for segmentwise sequence alignment
+    /*fun printSegmentWiseSequenceAlignmentResult(
         testNumber: Int,
         messages: Map<Int, SSFParsedMessage>,
         expectedAlignments: Set<Triple<Int, Int, Pair<Int, Int>>>
     ) {
-        // needed to change Triple(it.protocolB, it.protocolA, it.segmentIndexB to it.segmentIndexA) to
-        // Triple(it.protocolA, it.protocolB, it.segmentIndexA to it.segmentIndexB) to compare it
-        fun normalize(triple: Triple<Int, Int, Pair<Int, Int>>): Triple<Int, Int, Pair<Int, Int>> {
-            val (a, b, pair) = triple
-            return if (a < b || (a == b && pair.first <= pair.second)) {
-                Triple(a, b, pair)
-            } else {
-                Triple(b, a, pair.second to pair.first)
-            }
-        }
-
         val alignments = SegmentWiseSequenceAlignment.align(messages)
         val foundAlignments = alignments.map { Triple(it.protocolA, it.protocolB, it.indexA to it.indexB) }.toSet()
 
@@ -200,23 +213,52 @@ object EvaluationHelper {
         println("Precision: ${(precision * 100).toInt()}%")
         println("Recall: ${(recall * 100).toInt()}%")
         println("F1 Score: ${(f1 * 100).toInt()}%")
+    }*/
+
+    // normalize so that (A,B,a->b) and (B,A,b->a) are the same
+    fun normalize(t: Triple<Int, Int, Pair<Int, Int>>): Triple<Int, Int, Pair<Int, Int>> {
+        val (a, b, p) = t
+        return if (a < b || (a == b && p.first <= p.second)) Triple(a, b, p)
+        else Triple(b, a, p.second to p.first)
     }
 
-    // Same as printSequenceAlignmentResult but for byte wise sequence alignment
-    fun printByteWiseSequenceAlignmentResult(
+    fun printSegmentWiseSequenceAlignmentResult(
         testNumber: Int,
         messages: Map<Int, SSFParsedMessage>,
         expectedAlignments: Set<Triple<Int, Int, Pair<Int, Int>>>
     ) {
-        // to set Triple<Int, Int, Pair<Int, Int>> in the right order
-        fun normalize(triple: Triple<Int, Int, Pair<Int, Int>>): Triple<Int, Int, Pair<Int, Int>> {
-            val (a, b, pair) = triple
-            return if (a < b || (a == b && pair.first <= pair.second)) {
-                Triple(a, b, pair)
-            } else {
-                Triple(b, a, pair.second to pair.first)
-            }
-        }
+        val startTime = kotlin.js.Date().getTime()
+        val runAlignment = SegmentWiseSequenceAlignment.align(messages)
+        val elapsedMs = kotlin.js.Date().getTime() - startTime
+
+        val foundAlignments = runAlignment
+            .map { Triple(it.protocolA, it.protocolB, it.indexA to it.indexB) }
+            .map(::normalize)
+            .toSet()
+
+        // normalize expected alignments
+        val expected = expectedAlignments.map(::normalize).toSet()
+        val correct = foundAlignments intersect expected
+        val total   = expected.size.coerceAtLeast(1)
+        val acc     = correct.size.toDouble() / total
+
+        totalCorrectItems  += correct.size
+        totalExpectedItems += expected.size
+        totalRuntime += elapsedMs
+
+        println("----- testSegmentWiseAlignment$testNumber -----")
+        println("Correct segment pairs: ${correct.size} / ${expected.size}")
+        println("Segment-level accuracy: ${(acc * 100).toInt()}%")
+        println("Runtime: ${elapsedMs} ms")
+    }
+
+
+    // Same as printSequenceAlignmentResult but for byte wise sequence alignment. This calculates F1-score for bytewise alignment
+    /*fun printByteWiseSequenceAlignmentResult(
+        testNumber: Int,
+        messages: Map<Int, SSFParsedMessage>,
+        expectedAlignments: Set<Triple<Int, Int, Pair<Int, Int>>>
+    ) {
 
         // map byte index to the segment start index
         fun buildByteToSegmentOffsetMap(message: SSFParsedMessage): Map<Int, Int> {
@@ -290,7 +332,76 @@ object EvaluationHelper {
         println("Recall: ${(recall * 100).toInt()}%")
         println("F1 Score: ${(f1 * 100).toInt()}%")
         println("Accuracy: ${(accuracy * 100).toInt()}%")
+    }*/
+
+    // this calculates how many bytes are corretly aliged in percent. It only calculates the accuracy
+    fun printByteWiseSequenceAlignmentResult(
+        testNumber: Int,
+        messages: Map<Int, SSFParsedMessage>,
+        expectedAlignments: Set<Triple<Int, Int, Pair<Int, Int>>>
+    ) {
+        // map segment index to byte index
+        fun segmentToBytes(message: SSFParsedMessage): Map<Int, Set<Int>> {
+            val map = mutableMapOf<Int, MutableSet<Int>>()
+            val segments = message.segments + SSFSegment(message.bytes.size, SSFField.UNKNOWN) // add boundary at the end
+            for (i in 0 until message.segments.size) {
+                val start = segments[i].offset
+                val end = segments[i + 1].offset
+                map[i] = (start until end).toMutableSet()
+            }
+            return map
+        }
+
+        // expected byte pairs based on segment pairs
+        val expectedBytePairs = expectedAlignments.flatMap { (protoA, protoB, segPair) ->
+            val msgA = messages[protoA] ?: return@flatMap emptyList()
+            val msgB = messages[protoB] ?: return@flatMap emptyList()
+            val segBytesA = segmentToBytes(msgA)[segPair.first] ?: return@flatMap emptyList()
+            val segBytesB = segmentToBytes(msgB)[segPair.second] ?: return@flatMap emptyList()
+
+            segBytesA.flatMap { byteA ->
+                segBytesB.map { byteB ->
+                    normalize(Triple(protoA, protoB, byteA to byteB))
+                }
+            }
+        }.toSet()
+
+        val startTime = kotlin.js.Date().getTime()
+        val runAlignment = ByteWiseSequenceAlignment.align(messages)
+        val elapsedMs = kotlin.js.Date().getTime() - startTime
+
+        val foundAlignments = runAlignment.map { normalize(Triple(it.protocolA, it.protocolB, it.indexA to it.indexB)) }.toSet()
+
+        // check for every byte if it's aligned with any other byte in the segment pair
+        val totalBytes = expectedBytePairs.map { it.first to it.third.first }.toSet().size
+        val correctBytes = expectedBytePairs.any { pair -> foundAlignments.contains(pair) }
+            .let { _ ->
+                expectedBytePairs.map { it.first to it.third.first }.distinct().count { byteRef ->
+                    expectedBytePairs.any { exp ->
+                        exp.first == byteRef.first &&
+                                exp.third.first == byteRef.second &&
+                                foundAlignments.any { found ->
+                                    found.first == exp.first &&
+                                            found.second == exp.second &&
+                                            found.third == exp.third
+                                }
+                    }
+                }
+            }
+
+
+
+        totalCorrectItems += correctBytes
+        totalExpectedItems += totalBytes
+        totalRuntime += elapsedMs
+
+        val accuracy = correctBytes.toDouble() / totalBytes.coerceAtLeast(1)
+
+        println("----- testByteWiseAlignment$testNumber -----")
+        println("Correctly aligned bytes: $correctBytes / $totalBytes")
+        println("Byte-level accuracy: ${(accuracy * 100).toInt()}%")
     }
+
 
 
     fun printSegmentationWithSequenceAlignmentResult(
