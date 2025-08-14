@@ -9,7 +9,7 @@ object SegmentWiseSequenceAlignment : AlignmentResult<SSFParsedMessage> {
     // main function for sequence alignment
     override fun align(messages: Map<Int, SSFParsedMessage>): List<AlignedSequence> {
         val alignments = mutableListOf<AlignedSequence>()
-        val thresholdAlignedSegment = 0.17
+        val thresholdAlignedSegment = 0.83
 
         // get dissimilarity matrix (by using canberra-ulm dissimilarity)
         val sparseMatrixData = calcSparseSimilarityMatrix(messages, thresholdAlignedSegment)
@@ -37,10 +37,7 @@ object SegmentWiseSequenceAlignment : AlignmentResult<SSFParsedMessage> {
 
                 val sim = matrixS[i - 1 to j - 1] ?: Double.NEGATIVE_INFINITY
                 if (score == diag + sim) {
-                    if (1.0 - sim < thresholdAlignedSegment) {
-                        alignments.add(AlignedSequence(protoA, protoB, i - 1, j - 1, 1.0 - sim))
-                    }
-
+                    alignments.add(AlignedSequence(protoA, protoB, i - 1, j - 1, 1.0 - sim))
                     i--
                     j--
                 } else if (score == up + gapPenalty) {
@@ -122,8 +119,8 @@ object SegmentWiseSequenceAlignment : AlignmentResult<SSFParsedMessage> {
                         val dissim = canberraUlmDissimilarity(segmentBytesA, segmentBytesB, typeA, typeB)
                         // val dissim = canberraDissimilarityByteWise(segmentBytesA, segmentBytesB, typeA, typeB)
                         // val dissim = canberraDissimilarityWithPooling(segmentBytesA, segmentBytesB)
-                        val sim = 1.0 - dissim
 
+                        val sim = 1.0 - dissim
                         if (sim >= similarityThreshold) {
                             // save matches for segmentA
                             simMap[segmentAIndex to segmentBIndex] = sim
