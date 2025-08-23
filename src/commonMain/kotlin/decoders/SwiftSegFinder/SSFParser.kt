@@ -6,7 +6,12 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.random.Random
 
+
+data class GaussianKernel(val sigma: Double, val radius: Int, val weights: DoubleArray)
+
 class SSFParser {
+    private val GAUSS_06: GaussianKernel = precomputeGaussianKernel(0.6)
+
     // this finds all segment boundaries and returns a SSF object that can be called to get the html code
     fun parse(bytes: ByteArray, msgIndex: Int): SSFParsedMessage {
         val segments = findSegmentBoundaries(bytes)
@@ -826,7 +831,7 @@ class SSFParser {
             val deltaBC = computeDeltaBC(slice)
 
             // sigma should depend on the field length: Nemesys paper on page 5
-            val smoothed = applyGaussianFilter(deltaBC, 0.6)
+            val smoothed = applyGaussianFilter(deltaBC, GAUSS_06)
 
             // Safety check (it mostly enters if the bytes are too short)
             if (smoothed.isEmpty()) {
@@ -887,34 +892,39 @@ class SSFParser {
         return deltaBC
     }
 
-    // apply gaussian filter to smooth deltaBC. So we don't interpret every single change as a field boundary
-    private fun applyGaussianFilter(deltaBC: DoubleArray, sigma: Double): DoubleArray {
+    // pre compute kernel value
+    private fun precomputeGaussianKernel(sigma: Double): GaussianKernel {
         val radius = ceil(3 * sigma).toInt()
         val size = 2 * radius + 1 // calc kernel size
-        val kernel = DoubleArray(size)  // kernel as DoubleArray
+        val weights = DoubleArray(size) // kernel as DoubleArray
         var sum = 0.0
-
-        // calc kernel and sum of values
         for (i in -radius..radius) {
-            kernel[i + radius] = exp(-0.5 * (i * i) / (sigma * sigma))  // gaussian weight
-            sum += kernel[i + radius]
+            weights[i + radius] = exp(-0.5 * (i * i) / (sigma * sigma)) // gaussian weight
+            sum += weights[i + radius]
         }
 
         // normalize kernel
-        for (i in kernel.indices) {
-            kernel[i] /= sum
-        }
+        for (i in weights.indices) weights[i] /= sum
+
+        return GaussianKernel(sigma, radius, weights)
+    }
+
+    // apply gaussian filter to smooth deltaBC. So we don't interpret every single change as a field boundary
+    private fun applyGaussianFilter(deltaBC: DoubleArray, kernel: GaussianKernel): DoubleArray {
+        val r = kernel.radius
+        val w = kernel.weights
 
         // calc smoothed array
         val smoothed = DoubleArray(deltaBC.size)
         for (i in deltaBC.indices) {
-            smoothed[i] = 0.0
-            for (j in -radius..radius) {
+            var acc = 0.0
+            for (j in -r..r) {
                 val idx = i + j
-                if (idx >= 0 && idx < deltaBC.size) {
-                    smoothed[i] += deltaBC[idx] * kernel[j + radius]  // weighted average
+                if (idx in deltaBC.indices) {
+                    acc += deltaBC[idx] * w[j + r] // weighted average
                 }
             }
+            smoothed[i] = acc
         }
 
         return smoothed

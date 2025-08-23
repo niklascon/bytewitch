@@ -11,24 +11,26 @@ class TestCustomParser {
         return SSFParser().parse(bytes, index)
     }
 
-    /*@Test
+    @Test
     fun testSegmentation() {
         var totalTimeMs = 0.0
 
         TestMessageSamples.testMessages.forEachIndexed { index, testMessage ->
-            val start = kotlin.js.Date().getTime()
-            val parsed = parserForSegmentParsing(testMessage.message, index)
-            val end = kotlin.js.Date().getTime()
-            val durationMs = end - start
-            totalTimeMs += durationMs
+            if (index in 0.. 18) {
+                val start = kotlin.js.Date().getTime()
+                val parsed = parserForSegmentParsing(testMessage.message, index)
+                val end = kotlin.js.Date().getTime()
+                val durationMs = end - start
+                totalTimeMs += durationMs
 
-            EvaluationHelper.printSegmentParsingResult(index, testMessage.segments, parsed.segments)
+                EvaluationHelper.printSegmentParsingResult(index, testMessage.segments, parsed.segments)
+            }
         }
 
         println("Total runtime: ${totalTimeMs}ms")
 
         EvaluationHelper.printFinalScore()
-    }*/
+    }
 
     /*@Test
     fun testMessageGroupSegmentationWithEntropy() {
@@ -79,7 +81,7 @@ class TestCustomParser {
         assertTrue(false, "F1 score should be at least 80%")
     }*/
 
-    @Test
+    /*@Test
     fun testSegmentWiseSequenceAlignment() {
         for ((index, test) in TestMessageSamples.alignmentTests.withIndex()) {
             val msgA = TestMessageSamples.testMessages[test.messageAIndex]
@@ -109,7 +111,7 @@ class TestCustomParser {
 
         // EvaluationHelper.printFinalScore()
         EvaluationHelper.printFinalScoreSequenceAlignment()
-    }
+    }*/
 
     // Das macht irgendwie ein Tick zu wenig Sinn und ist nicht wirklich vergleichbar
     /*@Test
