@@ -522,7 +522,7 @@ class SSFParser {
             val total = messages.size.toDouble()
             entropy[i] = counts.entries.sumOf { (v, c) ->
                 val p = c / total
-                -p * ln(p)// TODO ln or log2?
+                -p * ln(p)
             }
         }
 
