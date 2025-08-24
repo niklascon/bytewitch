@@ -716,7 +716,7 @@ object TestMessageSamples {
 
 
 
-        // AB HIER SIND 50 ZUSAMMEN GENERIERT WORDEN
+        // Starting from here, the next 50 messages are similar to each other and made for group comparison
         TestMessage(19,
             "0307666c6b706361700401000401000204c46b136f01027f500304687971660208c08900daf5c7384a01025d2c030a787663656d6463656e64".fromHex(),
             listOf(
@@ -2794,7 +2794,7 @@ object TestMessageSamples {
 
 
 
-        // AB HIER FÜR SwiftSegFinder vs Nemesys vs Netzob
+        // Starting from here, the next 100 messages are similar and used for group comparison with SwiftSegFinder, Nemesys and Netzob
         TestMessage(70,
             "01043d4ab5ac040101030a6b6b77697a666e76707a05110208408dc3e9c070848e03057574796a6c0204c446bfdb030a726b74686977737a73740208406dedb6e2a75c80051d0401010401000104e7f6e3850204441f15930204c2456b6e030365666e0304747a657905060101a6040100030371697a040101010415b085d30301720401010102fab104010103046f676879".fromHex(),
             listOf(
@@ -11128,6 +11128,7 @@ object TestMessageSamples {
     )
 
     val messageGroups = listOf(
+
         /*
         MessageGroup(0, TestMessageSamples.testMessages.subList(19, 19 + 5)), // To test entropy vs nemesys
         MessageGroup(1, TestMessageSamples.testMessages.subList(19, 19 + 10)), // To test entropy vs nemesys

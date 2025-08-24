@@ -55,7 +55,35 @@ class TestCustomParser {
         }
 
         assertTrue(false, "F1 score should be at least 80%")
+    }
+
+    @Test
+    fun testMessageGroupSegmentationWithEntropyWithRefinement() {
+        TestMessageSamples.messageGroups.forEach { group ->
+            println("=== Testing Custom Parser Group ${group.typeId} with Entropy and Across Message Refinment ===")
+
+            val emptyParsedMessages = group.messages.map { testMessage ->
+                SSFParsedMessage(emptyList(), testMessage.message, testMessage.index)
+            }
+
+            val entropyParsedMessages = SSFParser().parseEntropy(emptyParsedMessages)
+
+            val refinedMessages = SSFParser().refineSegmentsAcrossMessages(entropyParsedMessages)
+
+            group.messages.zip(refinedMessages).forEach { (testMessage, refined) ->
+                EvaluationHelper.printSegmentParsingResult(
+                    testMessage.index,
+                    testMessage.segments,
+                    refined.segments
+                )
+            }
+
+            EvaluationHelper.printFinalScore()
+        }
+
+        assertTrue(false, "F1 score should be at least 80%")
     }*/
+
 
     /*@Test
     fun testMessageGroupSegmentation() {
@@ -80,6 +108,50 @@ class TestCustomParser {
 
         assertTrue(false, "F1 score should be at least 80%")
     }*/
+
+    /*@Test
+    fun testMessageGroupSegmentationWithRefinement() {
+        fun nowMs(): Double = js("performance.now()") as Double
+
+        TestMessageSamples.messageGroups.forEach { group ->
+            println("=== Testing Custom Parser Group ${group.typeId} with Across Message Refinement ===")
+
+            // parse all messages
+            val tParseStart = nowMs()
+            val parsedByIndex: MutableMap<Int, SSFParsedMessage> = mutableMapOf()
+
+            group.messages.forEach { testMessage ->
+                val parsed = parserForSegmentParsing(testMessage.message, testMessage.index)
+                parsedByIndex[testMessage.index] = parsed
+            }
+            val tParseEnd = nowMs()
+
+            // refinement for all parsed messages
+            val parsedListInOrder: List<SSFParsedMessage> = group.messages.map { parsedByIndex.getValue(it.index) } // set order
+            val tRefineStart = nowMs()
+            val refinedList: List<SSFParsedMessage> = SSFParser().refineSegmentsAcrossMessages(parsedListInOrder)
+            val tRefineEnd = nowMs()
+
+            // evaluation per message
+            refinedList.forEachIndexed { i, refinedMsg ->
+                val testMessage = group.messages[i]
+                EvaluationHelper.printSegmentParsingResult(
+                    testMessage.index,
+                    testMessage.segments, // ground truth
+                    refinedMsg.segments // predicted
+                )
+            }
+
+            println("Parse runtime: ${(tParseEnd - tParseStart)}ms")
+            println("Refine runtime: ${(tRefineEnd - tRefineStart)}ms")
+            println("Total runtime: ${((tParseEnd - tParseStart) + (tRefineEnd - tRefineStart))}ms")
+
+            EvaluationHelper.printFinalScore() // TODO wenn das benutzt wird, muss in printFinalScore das assertTrue raus!!!
+        }
+
+        assertTrue(false, "F1 score should be at least 80%")
+    }*/
+
 
     /*@Test
     fun testSegmentWiseSequenceAlignment() {
