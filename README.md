@@ -11,13 +11,13 @@ Give it a try at [rec0de.net/open/bytewitch](https://rec0de.net/open/bytewitch)
 ## Installation & Development Guide
 
 This project is a pure **web application** written in **Kotlin** and compiled to **JavaScript**.  
-There is no backend – all logic runs entirely in the browser.
+There is no backend, so all logic runs entirely in the browser.
 
 ### Architecture
 - **Language:** Kotlin  
 - **Target platform:** JavaScript (Kotlin/JS)  
 - **Execution:** Everything runs client-side in the browser  
-- **Backend:** None – the entire application is delivered as JavaScript  
+- **Backend:** None, the entire application is delivered as JavaScript  
 
 ### Prerequisites
 - IntelliJ IDEA (recommended)  
