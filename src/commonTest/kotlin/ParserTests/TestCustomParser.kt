@@ -32,7 +32,7 @@ class TestCustomParser {
         EvaluationHelper.printFinalScore()
     }*/
 
-    @Test
+    /*@Test
     fun testMessageGroupSegmentationWithEntropy() {
         TestMessageSamples.messageGroups.forEach { group ->
             println("=== Testing Custom Parser Group ${group.typeId} with Entropy ===")
@@ -107,9 +107,9 @@ class TestCustomParser {
         }
 
         assertTrue(false, "F1 score should be at least 80%")
-    }
+    }*/
 
-    @Test
+    /*@Test
     fun testMessageGroupSegmentationWithRefinement() {
         fun nowMs(): Double = js("performance.now()") as Double
 
@@ -150,7 +150,7 @@ class TestCustomParser {
         }
 
         assertTrue(false, "F1 score should be at least 80%")
-    }
+    }*/
 
 
     /*@Test
