@@ -506,6 +506,153 @@ class SSFParser {
         return -1
     }
 
+    /*
+    private fun getTwoBits(bytes: ByteArray, quarterIndex: Int): Int {
+        val byteIndex = quarterIndex / 4
+        val within = quarterIndex % 4
+        val b = bytes[byteIndex].toInt() and 0xFF
+        val shift = (3 - within) * 2
+        return (b shr shift) and 0x03
+    }
+
+    fun calcTwoBitEntropy(messages: List<SSFParsedMessage>): DoubleArray {
+        val minLength = messages.minOf { it.bytes.size }
+        val minQuarters = minLength * 4
+        val entropy = DoubleArray(minQuarters) { 0.0 }
+
+        val counts = IntArray(4)
+
+        for (i in 0 until minQuarters) {
+            counts.fill(0)
+            for (msg in messages) {
+                val sym = getTwoBits(msg.bytes, i)
+                counts[sym]++
+            }
+            val total = messages.size.toDouble()
+            var h = 0.0
+            for (c in counts) {
+                if (c > 0) {
+                    val p = c / total
+                    h += -p * ln(p)
+                }
+            }
+            entropy[i] = h
+        }
+        return entropy
+    }
+
+    fun calcTwoBitGainRatio(messages: List<SSFParsedMessage>, entropy: DoubleArray): DoubleArray {
+        val minLength = messages.minOf { it.bytes.size }
+        val minQuarters = minLength * 4
+        val gr = DoubleArray(minQuarters) { 0.0 }
+
+        val pairCounts = IntArray(16) // index = a*4 + b
+        val countsI = IntArray(4)
+        val countsJ = IntArray(4)
+
+        for (i in 0 until minQuarters - 1) {
+            pairCounts.fill(0)
+            countsI.fill(0)
+            countsJ.fill(0)
+
+            for (msg in messages) {
+                val a = getTwoBits(msg.bytes, i)
+                val b = getTwoBits(msg.bytes, i + 1)
+                pairCounts[a * 4 + b]++
+                countsI[a]++
+                countsJ[b]++
+            }
+
+            val total = messages.size.toDouble()
+
+            // H(X,Y)
+            var hXY = 0.0
+            for (c in pairCounts) if (c > 0) {
+                val p = c / total
+                hXY += -p * ln(p)
+            }
+
+            // H(X)
+            var hX = 0.0
+            for (c in countsI) if (c > 0) {
+                val p = c / total
+                hX += -p * ln(p)
+            }
+
+            // H(Y)
+            var hY = 0.0
+            for (c in countsJ) if (c > 0) {
+                val p = c / total
+                hY += -p * ln(p)
+            }
+
+            val ig = hY - (hXY - hX) // IG(D_{i+1}, D_i)
+            gr[i] = if (entropy[i] > 0.0) ig / entropy[i] else 0.0
+        }
+
+        return gr
+    }
+
+    private fun getBoundariesUsingTwoBitEntropy(
+        messages: List<SSFParsedMessage>,
+        entropy: DoubleArray,
+        gr: DoubleArray,
+        threshold: Double
+    ): Set<Int> {
+        val minQuarters = messages.minOf { it.bytes.size } * 4
+        val boundaries = mutableSetOf<Int>()
+
+        for (i in 1 until minQuarters - 1) {
+            // Rule 1
+            if (entropy[i] >= entropy[i - 1] && entropy[i] > entropy[i + 1]) {
+                boundaries.add(i)
+            }
+            // Rule 3
+            if (entropy[i] > 0.0 && gr[i] < gr[i - 1] && gr[i] < gr[i + 1]) {
+                boundaries.add(i)
+            }
+            // Rule 4
+            if (entropy[i] > 0.0 && gr[i] < threshold) {
+                boundaries.add(i)
+            }
+        }
+
+        // Rule 2
+        for (i in 1 until minQuarters) {
+            if (entropy[i - 1] == 0.0 && entropy[i] > 0.0) {
+                val o = (i - 1 downTo 0).takeWhile { entropy[it] == 0.0 }.count()
+                val boundary = i - o
+                val delta = boundary % 8
+                boundaries.add(boundary - delta)
+            }
+        }
+
+        return boundaries.sorted().toSet()
+    }
+
+
+    fun findEntropyBoundariesTwoBits(messages: List<SSFParsedMessage>): List<SSFParsedMessage> {
+        if (messages.isEmpty()) return emptyList()
+
+        val entropy = calcTwoBitEntropy(messages)
+        val gr = calcTwoBitGainRatio(messages, entropy)
+        val globalBoundaries = getBoundariesUsingTwoBitEntropy(messages, entropy, gr, threshold = 0.01)
+
+        return messages.map { message ->
+            val quarterLimit = message.bytes.size * 4
+            val localQuarterOffsets = globalBoundaries.filter { it in 1 until quarterLimit }
+
+            val localByteOffsets = localQuarterOffsets
+                .map { it / 4 }
+                .filter { it in 1 until message.bytes.size }
+                .distinct()
+                .sorted()
+
+            val segments = postProcessing(localByteOffsets.toMutableList(), message.bytes)
+            SSFParsedMessage(segments, message.bytes, message.msgIndex)
+        }
+    }*/
+
     // calculate information entropy H(Di) for every position
     fun calcBytewiseEntropy(messages: List<SSFParsedMessage>): DoubleArray {
         val minLength = messages.minOf { it.bytes.size }
@@ -656,7 +803,7 @@ class SSFParser {
         for (i in 1 until minLength) {
             if (entropy[i - 1] == 0.0 && entropy[i] > 0.0) { // past entropy was 0 and now it changed to something higher
                 val o = (i - 1 downTo 0).takeWhile { entropy[it] == 0.0 }.count() // check how many previous bytes with entropy 0 exist
-                val delta = (i - o) % 4 // TODO not sure if that's correct
+                val delta = (i - o) % 4
                 boundaries.add(delta)
             }
         }
@@ -755,46 +902,17 @@ class SSFParser {
 
         // postprocessing and return in right format
         return messages.map { message ->
-            // Post Processing to improve local segmentation
-            val localOffsets = globalBoundaries.filter { it < message.bytes.size }.toMutableList()
+            val nibbleLimit = message.bytes.size * 2
+            val localNibbleOffsets = globalBoundaries.filter { it in 1 until nibbleLimit }
 
-            val segments = postProcessing(localOffsets, message.bytes).toMutableList()
-            // if want to be used without postProcessing (performs worse)
-            /*val segments = localOffsets.map { offset ->
-                SSFSegment(offset = offset, fieldType = SSFField.UNKNOWN)
-            }*/
+            // transfer nibble offset into byte offset
+            val localByteOffsets = localNibbleOffsets
+                .map { it / 2 } // nibble to byte
+                .filter { it in 1 until message.bytes.size }
+                .distinct()
+                .sorted()
 
-
-            /*val deltaBC = computeDeltaBC(message.bytes)
-
-            // sigma should depend on the field length: Nemesys paper on page 5
-            val smoothed = applyGaussianFilter(deltaBC, 0.6)
-
-            // Safety check (it mostly enters if the bytes are too short)
-            /*if (smoothed.isEmpty()) { // TODO ???
-                segments.add(SSFSegment(0, SSFField.UNKNOWN))
-                continue
-            }*/
-
-            // find extrema of smoothedDeltaBC
-            val extrema = findExtremaInList(smoothed)
-
-            // find all rising points from minimum to maximum in extrema list
-            val rising = findRisingDeltas(extrema)
-
-            // find inflection point in risingDeltas -> those are considered as boundaries
-            val inflection = findInflectionPoints(rising, deltaBC)
-
-            // merge consecutive text segments together
-            // val boundaries = mergeCharSequences(preBoundaries, bytes)
-            val improved = postProcessing(inflection.toMutableList(), message.bytes)
-
-            // add relativeStart to the boundaries
-            for ((relativeStart, type) in improved) {
-                segments.add(SSFSegment(relativeStart, type))
-            }*/
-
-
+            val segments = postProcessing(localByteOffsets.toMutableList(), message.bytes)
 
             SSFParsedMessage(segments, message.bytes, message.msgIndex)
         }
@@ -1201,8 +1319,59 @@ class SSFParser {
         return segments
     }
 
+    // H in [0,1] using byte-alphabet (|A|=256)
+    fun entropyBytesNormalized(segment: ByteArray): Double {
+        if (segment.isEmpty()) return 0.0
 
-    // merge two segments based on their entropy
+        val counts = IntArray(256)
+        for (b in segment) counts[b.toInt() and 0xFF]++
+
+        val total = segment.size.toDouble()
+        var h = 0.0
+        for (c in counts) if (c > 0) {
+            val p = c / total
+            h -= p * ln(p)
+        }
+
+        return h / ln(256.0)
+    }
+
+    // H in [0,1] using nibble-alphabet (|A|=16)
+    fun entropyNibblesNormalized(segment: ByteArray): Double {
+        if (segment.isEmpty()) return 0.0
+
+        val counts = IntArray(16)
+        var n = 0 // count nibbles
+        for (b in segment) {
+            val x = b.toInt() and 0xFF
+            counts[(x ushr 4) and 0x0F]++
+            counts[x and 0x0F]++
+            n += 2
+        }
+
+        val total = n.toDouble()
+        var h = 0.0
+        for (c in counts) if (c > 0) {
+            val p = c / total
+            h -= p * ln(p)
+        }
+
+        return h / ln(16.0)
+    }
+
+    // compute the byte-wise xor of the first l bytes of two arrays
+    fun xorPrefix(a: ByteArray, b: ByteArray, l: Int): ByteArray {
+        val len = minOf(l, a.size, b.size)
+        val out = ByteArray(len)
+
+        for (i in 0 until len) {
+            out[i] = (a[i].toInt() xor b[i].toInt()).toByte()
+        }
+
+        return out
+    }
+
+    // merge two segments together that have a high entropy
     fun entropyMerge(
         segments: List<SSFSegment>,
         bytes: ByteArray
@@ -1214,27 +1383,26 @@ class SSFParser {
             // get current segment
             val (start, fieldType) = segments[index]
             val end = if (index + 1 < segments.size) segments[index + 1].offset else bytes.size
-            val currentSegment = bytes.sliceArray(start until end)
-            val currentEntropy = calculateShannonEntropy(currentSegment)
+            val segA = bytes.sliceArray(start until end)
+            // val hA = entropyNibblesNormalized(segA) // nibble entropy of segment A
+            val hA = entropyBytesNormalized(segA) // byte entropy of segment A
 
             if (index + 1 < segments.size) { // check if a following segment exists
-                val (nextStart, nextFieldType) = segments[index + 1]
-                if (fieldType == nextFieldType) {  // check that both field have the same field type
+                val (nextStart, nextType) = segments[index + 1]
+                if (fieldType == nextType) { // check that both field have the same field type
                     val nextEnd = if (index + 2 < segments.size) segments[index + 2].offset else bytes.size
-                    val nextSegment = bytes.sliceArray(nextStart until nextEnd)
-                    val nextEntropy = calculateShannonEntropy(nextSegment)
+                    val segB = bytes.sliceArray(nextStart until nextEnd)
+                    // val hB = entropyNibblesNormalized(segB) // nibble entropy of segment B
+                    val hB = entropyBytesNormalized(segB) // byte entropy of segment B
 
-                    val entropyDiff = kotlin.math.abs(currentEntropy - nextEntropy)
-
-                    if (currentEntropy > 0.7 && nextEntropy > 0.7 && entropyDiff < 0.05) {
+                    val diff = kotlin.math.abs(hA - hB)
+                    if (hA > 0.7 && hB > 0.7 && diff < 0.05) {
                         // xor of the start bytes for both segments
-                        val xorLength = minOf(2, currentSegment.size, nextSegment.size)
-                        val xorStart1 = currentSegment.take(xorLength).toByteArray()
-                        val xorStart2 = nextSegment.take(xorLength).toByteArray()
-                        val xorResult = ByteArray(xorLength) { i -> (xorStart1[i].toInt() xor xorStart2[i].toInt()).toByte() }
-                        val xorEntropy = calculateShannonEntropy(xorResult)
+                        val xor = xorPrefix(segA, segB, 2)
+                        // val hX = entropyNibblesNormalized(xor)
+                        val hX = entropyBytesNormalized(xor)
 
-                        if (xorEntropy > 0.8) { // in the paper it's set to 0.95 instead of 0.8. Algorithm 3, however, says 0.8
+                        if (hX > 0.8) { // in the paper it's set to 0.95 instead of 0.8. Algorithm 3, however, says 0.8
                             // merge segments together
                             result.add(SSFSegment(start, fieldType))
                             index += 2 // skip the following field because we want to merge it to this one
@@ -1248,7 +1416,6 @@ class SSFParser {
             result.add(SSFSegment(start, fieldType))
             index++
         }
-
         return result
     }
 
