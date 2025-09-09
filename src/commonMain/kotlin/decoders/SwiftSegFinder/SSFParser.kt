@@ -813,7 +813,7 @@ class SSFParser {
 
 
     // set boundaries using Entropy and Gain Ratio
-    private fun getBoundariesUsingHalbByteEntropy(messages: List<SSFParsedMessage>, entropy: DoubleArray, gr: DoubleArray, threshold: Double): Set<Int> {
+    private fun getBoundariesUsingHalfByteEntropy(messages: List<SSFParsedMessage>, entropy: DoubleArray, gr: DoubleArray, threshold: Double): Set<Int> {
         val minHalfBytes = messages.minOf { it.bytes.size } * 2
 
         val boundaries = mutableSetOf<Int>()
@@ -898,7 +898,7 @@ class SSFParser {
 
         // get boundaries based on rules
         // val globalBoundaries = getBoundariesUsingEntropy(messages, entropy, gr, 0.01)
-        val globalBoundaries = getBoundariesUsingHalbByteEntropy(messages, entropy, gr, 0.01)
+        val globalBoundaries = getBoundariesUsingHalfByteEntropy(messages, entropy, gr, 0.01)
 
         // postprocessing and return in right format
         return messages.map { message ->
