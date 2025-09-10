@@ -1,5 +1,8 @@
 import kotlinx.browser.document
 import org.w3c.dom.*
+import kotlin.js.Date
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 // remove text area from view and corresponding listeners
 fun removeTextArea(dataContainer: Element) {
@@ -10,22 +13,36 @@ fun removeTextArea(dataContainer: Element) {
     dataContainer.removeChild(dataContainer.lastElementChild!!)
 
     parsedMessages.remove(lastIndex)
+    ssfEligible.remove(lastIndex)
 
-    // TODO need to remove alignment listeners
+    removeAllSequenceAlignmentListeners()
+    if (ssfEligible.size >= 2) {
+        showStartSequenceAlignmentButton()
+    } else {
+        hideStartSequenceAlignmentButton()
+        hideSequenceAlignmentToggleButton()
+
+        // switch to segmentwise view if only one ssf item is left
+        if (!showSegmentWiseAlignment && ssfEligible.isNotEmpty()) {
+            showSegmentWiseAlignment = true
+            ssfEligible.forEach { idx ->
+                parsedMessages[idx]?.let { parsed ->
+                    rerenderSSF(idx, parsed)
+                }
+            }
+        }
+    }
 
     // delete from output view
     val output = document.getElementById("output") as HTMLDivElement
-    val messageOutputs = output.querySelectorAll(".message-output")
-    if (messageOutputs.length > 0) {
-        // remove last child
-        output.removeChild(messageOutputs[messageOutputs.length - 1] as HTMLDivElement)
+    val target = document.getElementById("message-output-$lastIndex") as? HTMLDivElement
+    if (target != null) {
+        output.removeChild(target)
     }
 
-    // reset hexview
-    val hexview = document.getElementById("hexview") as HTMLDivElement
-    hexview.innerHTML = ""
+    // reset hexview to the bytes of the first textarea
+    setByteFinderContent(0)
 }
-
 
 // input listener for live decode of all text areas
 fun applyLiveDecodeListeners() {
@@ -34,12 +51,12 @@ fun applyLiveDecodeListeners() {
         val ta = textareas[i] as HTMLTextAreaElement
         ta.oninput = {
             if (liveDecodeEnabled)
-                decode(true)
+                mainDecode(true)
         }
     }
 }
 
-fun appendTextArea(content: String) {
+fun appendTextArea(content: String = "") {
     val container = document.getElementById("data_container")!!
 
     // create new textareaContainer if no empty one exists
@@ -66,9 +83,33 @@ fun appendTextArea(content: String) {
     wrapper.appendChild(sizeLabel)
     container.appendChild(wrapper)
 
-    if (liveDecodeEnabled) {
-        textarea.oninput = {
-            decode(true)
+    textarea.oninput = {
+        if(liveDecodeEnabled)
+            mainDecode(true)
+    }
+
+    textarea.onselect = {
+        lastSelectionEvent = Date().getTime()
+
+        // we can only do the offset and range calculations if we have plain hex input (i.e. no base64, hexdump)
+        if(textarea.getAttribute("data-plainhex") == "true") {
+            clearSelections()
+            Logger.log("selected ${textarea.selectionStart} to ${textarea.selectionEnd}")
+
+            val prefix = textarea.value.substring(0, textarea.selectionStart!!)
+            val sizeLabel = textarea.nextElementSibling as HTMLDivElement
+
+            val r = Regex("#[^\n]*$")
+            if(r.containsMatchIn(prefix))
+                sizeLabel.innerText = "" // selection starts in a comment
+            else {
+                val selection = textarea.value.substring(textarea.selectionStart!!, textarea.selectionEnd!!)
+                val offset = ByteWitch.stripCommentsAndFilterHex(prefix).length.toDouble()/2
+                val range = ByteWitch.stripCommentsAndFilterHex(selection).length.toDouble()/2
+
+
+                (sizeLabel.firstChild!!.nextSibling as HTMLSpanElement).innerText = " — selected ${range}B at offset $offset (0x${floor(offset).roundToInt().toString(16)})"
+            }
         }
     }
 }
@@ -84,7 +125,7 @@ fun appendTextareaForFileUpload(content: String) {
         val ta = textareas[i] as HTMLTextAreaElement
         if (ta.value.trim().isEmpty()) {
             ta.value = content
-            if (liveDecodeEnabled) decode(true)
+            if (liveDecodeEnabled) mainDecode(true)
             return
         }
     }

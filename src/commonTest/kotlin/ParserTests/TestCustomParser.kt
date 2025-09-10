@@ -11,7 +11,7 @@ class TestCustomParser {
         return SSFParser().parse(bytes, index)
     }
 
-    /*@Test
+    @Test
     fun testSegmentation() {
         var totalTimeMs = 0.0
 
@@ -30,7 +30,7 @@ class TestCustomParser {
         println("Total runtime: ${totalTimeMs}ms")
 
         EvaluationHelper.printFinalScore()
-    }*/
+    }
 
     /*@Test
     fun testMessageGroupSegmentationWithEntropy() {

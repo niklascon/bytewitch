@@ -6,10 +6,19 @@ import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.*
 import org.w3c.dom.HTMLTextAreaElement
+import kotlin.js.Date
+
+const val byteLimitSSFContent = 1000 // only show SwiftSegFinder for messages with a length below the defined threshold
+const val maxLimitSequenceAlignment = 5000 // max total bytes across all eligible messages for auto sequence alignment
+val ssfEligible = mutableSetOf<Int>() // msgIndex for protocol messages that show SwiftSegFinder output
+private val HIGH_END_DECODERS = setOf( // set of confident decoders when SSF is not allowed to show up
+    "bplist17", "bplist15", "bplist", // TODO maybe use enum to not write the name of it twice.
+)
 
 
 var liveDecodeEnabled = true
 var currentHighlight: Element? = null
+var lastSelectionEvent: Double? = null
 var tryhard = false
 
 // save parsed messages for float view and SwiftSegFinder
@@ -35,12 +44,12 @@ fun main() {
 
         decodeBtn.onclick = {
             tryhard = false
-            decode(false)
+            mainDecode(false)
         }
 
         tryhardBtn.onclick = {
             tryhard = true
-            decode(false)
+            mainDecode(false)
         }
 
         uploadBtn.onclick = {
@@ -88,50 +97,45 @@ fun main() {
             applyLiveDecodeListeners()
             0.0
         }
-    })
-}
 
-// use entropy decoder and attach output to messageBox
-fun decodeWithEntropy() { // TODO this can be removed
-    val  parsedMessages = SSFParser().parseEntropy(parsedMessages.values.toList())
+        // init first textarea
+        appendTextArea()
 
-    parsedMessages.forEach {
-        val messageId = "message-output-${it.msgIndex}"
-        var messageBox = document.getElementById(messageId) as HTMLDivElement
-
-        // remove old ssf content
-        val existingParsers = messageBox.querySelectorAll("h3")
-        for (i in 0 until existingParsers.length) {
-            val heading = existingParsers.item(i) as? HTMLHeadingElement ?: continue
-            if (heading.innerText.lowercase() == "SwiftSegFinder") {
-                heading.parentElement?.remove()
-                break
+        // a click anywhere clears any present selection
+        // (as do specific keystrokes, but we'll see if we want to worry about those)
+        document.onclick = {
+            // avoid immediately clearing selection from click associated with select event
+            if (lastSelectionEvent != null && Date().getTime() - lastSelectionEvent!! > 250) {
+                clearSelections()
             }
         }
 
-        // add new ssf content
-        val ssfResult = document.createElement("DIV") as HTMLDivElement
-        val ssfName = document.createElement("H3") as HTMLHeadingElement
-        ssfName.innerText = "SwiftSegFinder"
+        document.onkeydown = {
+            if (lastSelectionEvent != null && Date().getTime() - lastSelectionEvent!! > 250 && it.keyCode !in listOf(
+                    16,
+                    17,
+                    20
+                )
+            ) {
+                clearSelections()
+            }
+        }
 
-        val ssfContent = document.createElement("DIV") as HTMLDivElement
-        ssfContent.classList.add("parsecontent")
-        // ssfContent.innerHTML = SSFRenderer.render(it)
-        ssfContent.innerHTML = SSFRenderer.renderByteWiseHTML(it)
+    })
+}
 
-        attachRangeListeners(ssfContent, it.msgIndex)
-        attachSSFButtons(ssfContent, it.bytes, it.msgIndex)
-
-        ssfResult.appendChild(ssfName)
-        ssfResult.appendChild(ssfContent)
-
-        messageBox.appendChild(ssfResult)
+fun clearSelections() {
+    lastSelectionEvent = null
+    val inputs = document.querySelectorAll("textarea")
+    inputs.asList().forEach {
+        val sizeLabel = (it as HTMLTextAreaElement).nextElementSibling!!
+        val selectionLabel = sizeLabel.firstChild!!.nextSibling as HTMLSpanElement
+        selectionLabel.innerText = ""
     }
 }
 
-
 // decode one specific byte sequence
-fun decodeBytes(bytes: ByteArray, taIndex: Int, showSSFContent: Boolean) {
+fun decodeSingleMessage(bytes: ByteArray, taIndex: Int, showSSFContent: Boolean) {
     val output = document.getElementById("output") as HTMLDivElement
     val bytefinder = document.getElementById("bytefinder") as HTMLDivElement
     val hexview = document.getElementById("hexview") as HTMLDivElement
@@ -139,9 +143,9 @@ fun decodeBytes(bytes: ByteArray, taIndex: Int, showSSFContent: Boolean) {
     val noDecodeYet = document.getElementById("no_decode_yet") as HTMLElement
 
     // Reset output
-    hexview.innerHTML = ""
-    textview.innerHTML = ""
-    bytefinder.style.display = "none"
+    //hexview.innerHTML = ""
+    //textview.innerHTML = ""
+    //bytefinder.style.display = "none"
     noDecodeYet.style.display = "none"
 
     /*
@@ -173,9 +177,25 @@ fun decodeBytes(bytes: ByteArray, taIndex: Int, showSSFContent: Boolean) {
         messageBox.appendChild(renderByteWitchResult(it, taIndex))
     }
 
-    // for SSF content
-    if (showSSFContent) {
+    // check if result needs a SwiftSegFinder decoding
+    val allowSSF = showSSFContent && !hasHighEndHit(result)
+
+    if (allowSSF) {
+        // show SwiftSegFinder view
+        ssfEligible.add(taIndex)
         messageBox.appendChild(decodeWithSSF(bytes, taIndex))
+    } else {
+        ssfEligible.remove(taIndex)
+        (messageBox.querySelector(".ssf") as? HTMLElement)?.remove()
+
+        // button for SSF rendering
+        val btn = document.createElement("button") as HTMLButtonElement
+        btn.className = "show-ssf-button"
+        btn.textContent = "Show SwiftSegFinder"
+        btn.setAttribute("data-msg-index", taIndex.toString())
+        messageBox.appendChild(btn)
+
+        attachShowSSFButtonHandler(messageBox, bytes, taIndex)
     }
 }
 
@@ -199,7 +219,7 @@ private fun renderByteWitchResult(it: Pair<String, ByteWitchResult>, taIndex: In
 }
 
 // decode bytes with SwiftSegFinder and return HTML content
-private fun decodeWithSSF(bytes: ByteArray, taIndex: Int): HTMLDivElement {
+fun decodeWithSSF(bytes: ByteArray, taIndex: Int): HTMLDivElement {
     val ssfParsed = SSFParser().parse(bytes, taIndex)
     parsedMessages[taIndex] = ssfParsed
 
@@ -215,10 +235,6 @@ private fun decodeWithSSF(bytes: ByteArray, taIndex: Int): HTMLDivElement {
         SSFRenderer.renderByteWiseHTML(ssfParsed)
     }
 
-
-    attachRangeListeners(ssfContent, taIndex)
-    attachSSFButtons(ssfContent, bytes, taIndex)
-
     ssfResult.appendChild(ssfName)
     ssfResult.appendChild(ssfContent)
 
@@ -226,9 +242,7 @@ private fun decodeWithSSF(bytes: ByteArray, taIndex: Int): HTMLDivElement {
 }
 
 // decode all text areas
-fun decode(isLiveDecoding: Boolean) {
-    val showSSFContent = true
-
+fun mainDecode(isLiveDecoding: Boolean) {
     val textareas = document.querySelectorAll(".input_area")
     for (i in 0 until textareas.length) {
         // get bytes from textarea
@@ -239,69 +253,57 @@ fun decode(isLiveDecoding: Boolean) {
         (sizeLabel.firstChild as HTMLSpanElement).innerText = "${bytes.size}B (0x${bytes.size.toString(16)})"
         (sizeLabel.firstChild!!.nextSibling as HTMLSpanElement).innerText = "" // clear selection info
 
+        // remember if this textarea has plain hex input so we can enable selection highlighting
+        textarea.setAttribute("data-plainhex", ByteWitch.isPlainHex().toString())
+
         // only decode text area if input changed
         val oldBytes = parsedMessages[i]?.bytes
         if (oldBytes == null || !oldBytes.contentEquals(bytes)) {
             parsedMessages[i] = SSFParsedMessage(listOf(), bytes, i) // for float view if showSSFContent is set to false
-            decodeBytes(bytes, i, showSSFContent)
+
+            decodeSingleMessage(bytes, i, showSSFContent = bytes.size <= byteLimitSSFContent)
         }
     }
 
-    if (showSSFContent /*&& !isLiveDecoding*/) { // refine ssf fields and rerender html content
-        val refined = SSFParser().refineSegmentsAcrossMessages(parsedMessages.values.toList())
+    // show the bytes of the first text area in the byte finder view
+    setByteFinderContent(0)
+
+    val eligibleMsgs = getEligibleMsgsForSSF()
+    if (eligibleMsgs.isNotEmpty()) {
+        // refine ssf fields and rerender html content
+        val refined = SSFParser().refineSegmentsAcrossMessages(eligibleMsgs.values.toList())
         refined.forEach { msg ->
             parsedMessages[msg.msgIndex] = msg
-            rerenderSSF(msg.msgIndex, msg)
+            if (msg.msgIndex in ssfEligible) { // only rerender SwiftSegFinder view if its eligible
+                rerenderSSF(msg.msgIndex, msg)
+            }
         }
-    } else { // show output of entropy decoder
-        decodeWithEntropy()
     }
 
-    // for sequence alignment
-    if (tryhard && !isLiveDecoding && showSSFContent) {
+    if (!isLiveDecoding && autoRunSeqAlign(eligibleMsgs)) {
         if (showSegmentWiseAlignment) {
-            val alignedSegment = SegmentWiseSequenceAlignment.align(parsedMessages)
+            val alignedSegment = SegmentWiseSequenceAlignment.align(eligibleMsgs)
             attachSegmentWiseSequenceAlignmentListeners(alignedSegment)
         } else {
-            val alignedSegment = ByteWiseSequenceAlignment.align(parsedMessages)
+            val alignedSegment = ByteWiseSequenceAlignment.align(eligibleMsgs)
             attachByteWiseSequenceAlignmentListeners(alignedSegment)
         }
-
+    } else if(eligibleMsgs.size >= 2) {
+        showStartSequenceAlignmentButton()
     }
-
-    // TODO for testing purposes only
-    // includeAlignmentForTesting()
 }
 
-/*fun includeAlignmentForTesting() {
-    val output = document.getElementById("output") as HTMLDivElement
-    val testingMessages = getTestingData()
-    val messageBox = document.createElement("DIV") as HTMLDivElement
-    messageBox.classList.add("message-output")
-    for ((index, message) in testingMessages) {
-        val ssfResult = document.createElement("DIV") as HTMLDivElement
-        val ssfName = document.createElement("H3") as HTMLHeadingElement
-        ssfName.innerText = "SwiftSegFinder $index"
+// check if decoder is confident to not show SwiftSegFinder
+fun hasHighEndHit(results: List<Pair<String, ByteWitchResult>>): Boolean =
+    results.any { (name, _) -> name in HIGH_END_DECODERS }
 
-        val ssfContent = document.createElement("DIV") as HTMLDivElement
-        ssfContent.classList.add("parsecontent")
+// only return Messages that are allowed for SwiftSegFinder view
+fun getEligibleMsgsForSSF(): Map<Int, SSFParsedMessage> =
+    parsedMessages.filter { (idx, msg) -> idx in ssfEligible }
 
-        if (message != null) {
-            ssfContent.innerHTML = SSFRenderer.render(message)
-        } else {
-            ssfContent.innerText = "Error: message $index is null"
-        }
-
-        ssfResult.appendChild(ssfName)
-        ssfResult.appendChild(ssfContent)
-        messageBox.appendChild(ssfResult)
-        output.appendChild(messageBox)
-    }
-    setupSelectableSegments()
-    val btn = document.createElement("button") as HTMLElement
-    btn.innerText = "Export Alignments"
-    btn.onclick = {
-        console.log(exportAlignments())
-    }
-    document.body?.appendChild(btn)
-}*/
+// check if the messages are too long for auto sequence alignment
+fun autoRunSeqAlign(msgs: Map<Int, SSFParsedMessage>): Boolean {
+    if (msgs.size < 2) return false
+    val totalBytes = msgs.values.sumOf { it.bytes.size }
+    return totalBytes <= maxLimitSequenceAlignment
+}

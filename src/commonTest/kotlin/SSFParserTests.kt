@@ -351,6 +351,7 @@ class SSFParserTests {
     fun testEntropy_AllZeros() {
         val bytes = byteArrayOf(0x00, 0x00, 0x00, 0x00)
         val entropy = parser.entropyBytesNormalized(bytes)
+        // val entropy = parser.calculateShannonEntropy(bytes)
         assertEquals(0.0, entropy, 0.0001)
     }
 
@@ -358,6 +359,7 @@ class SSFParserTests {
     fun testEntropy_AllSameByte() {
         val bytes = byteArrayOf(0x41, 0x41, 0x41, 0x41) // 'A'
         val entropy = parser.entropyBytesNormalized(bytes)
+        // val entropy = parser.calculateShannonEntropy(bytes)
         assertEquals(0.0, entropy, 0.0001)
     }
 
@@ -366,6 +368,8 @@ class SSFParserTests {
         val bytes = byteArrayOf(0x41, 0x42, 0x41, 0x42) // 'A', 'B', 'A', 'B'
         val entropy = parser.entropyBytesNormalized(bytes)
         val expected = 0.125
+        /*val entropy = parser.calculateShannonEntropy(bytes)
+        val expected = 1.0*/
         assertEquals(expected, entropy, 0.0001)
     }
 
@@ -374,6 +378,8 @@ class SSFParserTests {
         val bytes = byteArrayOf(0x41, 0x42, 0x43, 0x44) // 'A', 'B', 'C', 'D'
         val entropy = parser.entropyBytesNormalized(bytes)
         val expected = 0.25
+        /* val entropy = parser.calculateShannonEntropy(bytes)
+        val expected = 2.0 */
         assertEquals(expected, entropy, 0.0001)
     }
 
@@ -833,7 +839,7 @@ class SSFParserTests {
 
         actual.forEachIndexed { index, msg ->
             val segments = msg.segments.sortedBy { it.offset }
-            val lengthField = segments.find { it.fieldType.name.startsWith("PAYLOAD_LENGTH") }
+            val lengthField = segments.find { it.fieldType.name.startsWith("MESSAGE_LENGTH") }
             val unknownAfterLength = segments.find { it.offset > (lengthField?.offset ?: -1) }
 
             assertNotNull(lengthField, "Length field missing in msg[$index]")

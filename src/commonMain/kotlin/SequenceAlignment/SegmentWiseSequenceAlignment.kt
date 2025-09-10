@@ -156,9 +156,11 @@ object SegmentWiseSequenceAlignment : AlignmentResult<SSFParsedMessage> {
 
         var minD = Double.MAX_VALUE
 
-        // if both segments are a payload length field so set canberra distance to 0
+        // if both segments are a length field so set canberra distance to 0
         if ((typeA == SSFField.PAYLOAD_LENGTH_LITTLE_ENDIAN && typeB == SSFField.PAYLOAD_LENGTH_LITTLE_ENDIAN)
-            || (typeA == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN && typeB == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN)) {
+            || (typeA == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN && typeB == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN)
+            || (typeA == SSFField.MESSAGE_LENGTH_LITTLE_ENDIAN && typeB == SSFField.MESSAGE_LENGTH_LITTLE_ENDIAN)
+            || (typeA == SSFField.MESSAGE_LENGTH_BIG_ENDIAN && typeB == SSFField.MESSAGE_LENGTH_BIG_ENDIAN)) {
             minD = 0.0
         } else {
             // sliding window to search for the lowest dissimilarity
@@ -185,7 +187,9 @@ object SegmentWiseSequenceAlignment : AlignmentResult<SSFParsedMessage> {
     private fun canberraDissimilarityByteWise(segmentA: ByteArray, segmentB: ByteArray, typeA: SSFField, typeB: SSFField): Double {
         // if both segments are a payload length field so set canberra distance to 0
         if ((typeA == SSFField.PAYLOAD_LENGTH_LITTLE_ENDIAN && typeB == SSFField.PAYLOAD_LENGTH_LITTLE_ENDIAN)
-            || (typeA == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN && typeB == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN)) {
+            || (typeA == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN && typeB == SSFField.PAYLOAD_LENGTH_BIG_ENDIAN)
+            || (typeA == SSFField.MESSAGE_LENGTH_LITTLE_ENDIAN && typeB == SSFField.MESSAGE_LENGTH_LITTLE_ENDIAN)
+            || (typeA == SSFField.MESSAGE_LENGTH_BIG_ENDIAN && typeB == SSFField.MESSAGE_LENGTH_BIG_ENDIAN)) {
             return 0.0
         }
 

@@ -6,7 +6,6 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.random.Random
 
-
 data class GaussianKernel(val sigma: Double, val radius: Int, val weights: DoubleArray)
 
 class SSFParser {
@@ -234,7 +233,6 @@ class SSFParser {
         return SSFParsedMessage(segments, bytes, msgIndex)
     }
 
-
     // every byte is one field. don't use postprocessing
     private fun setBytewiseSegmentBoundaries(bytes: ByteArray): List<SSFSegment>{
         // val taken = BooleanArray(bytes.size) { false }
@@ -292,7 +290,6 @@ class SSFParser {
         return (fixedSegments + dynamicSegments).sortedBy { it.offset }.distinctBy { it.offset }
     }
 
-
     // count how often every segment exists
     fun countSegmentValues(messages: List<SSFParsedMessage>, minSegmentLength: Int = 2): Map<ByteArray, Int> {
         val segmentValueCounts = mutableMapOf<ByteArray, Int>()
@@ -318,8 +315,6 @@ class SSFParser {
 
         return segmentValueCounts
     }
-
-
 
     // Split segments if one segment of another message appears quite often
     fun cropDistinct(messages: List<SSFParsedMessage>): List<SSFParsedMessage> {
@@ -424,10 +419,10 @@ class SSFParser {
             replacedSegments.add(
                 SSFSegment(
                     lengthFieldOffset,
-                    if (chosenEndian)
-                        SSFField.PAYLOAD_LENGTH_BIG_ENDIAN
+            if (chosenEndian)
+                        SSFField.MESSAGE_LENGTH_BIG_ENDIAN
                     else
-                        SSFField.PAYLOAD_LENGTH_LITTLE_ENDIAN
+                        SSFField.MESSAGE_LENGTH_LITTLE_ENDIAN
                 )
             )
 
@@ -439,13 +434,6 @@ class SSFParser {
 
             val finalSegments = replacedSegments.sortedBy { it.offset }
             msg.copy(segments = finalSegments)
-
-            /*val newSegments = msg.segments.toMutableList()
-            newSegments.add(SSFSegment(lengthFieldOffset,
-                if (chosenEndian) SSFField.PAYLOAD_LENGTH_BIG_ENDIAN else SSFField.PAYLOAD_LENGTH_LITTLE_ENDIAN))
-            newSegments.add(SSFSegment(payloadStart, SSFField.UNKNOWN))
-
-            msg.copy(segments = newSegments.sortedBy { it.offset }.distinctBy { it.offset })*/
         }
     }
 
@@ -466,9 +454,11 @@ class SSFParser {
             // payloadEnd must be message size
             if (payloadEnd != bytes.size) continue
 
-            // length field must be of type UNKNOWN
+            // length field must be of type UNKNOWN or already by a message length field because only one is allowed to exists
             val currentSegment = findSegmentForOffset(segments, offset)
-            if (currentSegment?.fieldType != SSFField.UNKNOWN) continue
+            if (currentSegment?.fieldType != SSFField.UNKNOWN
+                && currentSegment?.fieldType != SSFField.MESSAGE_LENGTH_BIG_ENDIAN
+                && currentSegment?.fieldType != SSFField.MESSAGE_LENGTH_LITTLE_ENDIAN) continue
 
             return offset to length
         }
@@ -918,7 +908,6 @@ class SSFParser {
         }
     }
 
-
     // find segmentation boundaries
     private fun findSegmentBoundaries(bytes: ByteArray): List<SSFSegment> {
         val taken = BooleanArray(bytes.size) { false } // list of bytes that have already been assigned
@@ -1155,14 +1144,6 @@ class SSFParser {
         val nullRatio = nullByteCount.toDouble() / length
         return nullRatio < 0.33 // only accept sequence as text if less than 33% of the sequence are 0x00 bytes
     }
-    /*fun fieldIsTextSegment(start: Int, end: Int, bytes: ByteArray): Boolean {
-        for (j in start until end) {
-            if (!isPrintableChar(bytes[j])) {
-                return false
-            }
-        }
-        return true
-    }*/
 
     // check if byte is a printable char
     fun isPrintableChar(byte: Byte): Boolean {
@@ -1371,7 +1352,7 @@ class SSFParser {
         return out
     }
 
-    // merge two segments together that have a high entropy
+    // merge two segments based on their entropy
     fun entropyMerge(
         segments: List<SSFSegment>,
         bytes: ByteArray
@@ -1416,6 +1397,7 @@ class SSFParser {
             result.add(SSFSegment(start, fieldType))
             index++
         }
+
         return result
     }
 
@@ -1524,8 +1506,6 @@ class SSFParser {
 
         return improved
     }
-
-
 
     // check if segment is a char sequence
     private fun isCharSegment(segment: ByteArray): Boolean {
