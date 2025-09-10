@@ -4,11 +4,12 @@ import bitmage.fromHex
 import decoders.SwiftSegFinder.SSFField
 import decoders.SwiftSegFinder.SSFSegment
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class TestNemesys {
 
-    /*@Test
-    fun testNemesysSegmentation() {
+    @Test
+    fun testNemesysVsSSFSegmentation() {
         testMessages.forEach { actual ->
             val expected = TestMessageSamples.testMessages.firstOrNull { it.index == actual.index }
                 ?: error("Expected segmentation for message ${actual.index} not found.")
@@ -21,10 +22,34 @@ class TestNemesys {
         }
 
         EvaluationHelper.printFinalScore()
-    }*/
+
+        assertTrue(false)
+    }
+
+    @Test
+    fun testNemesysVsNetzobVsSSFSegmentation() {
+        nemesysMessageGroups.forEach { group ->
+            println("=== Testing Nemesys Group ${group.typeId} ===")
+
+            group.messages.forEach { expected ->
+                val actual = actualNemesysSegmentation.firstOrNull { it.index == expected.index }
+                    ?: error("Actual segmentation for message ${expected.index} not found.")
+
+                EvaluationHelper.printSegmentParsingResult(
+                    testNumber = expected.index,
+                    expectedSegments = expected.segments,
+                    actualSegments = actual.segments
+                )
+            }
+
+            EvaluationHelper.printFinalScore()
+        }
+
+        assertTrue(false)
+    }
 
     // To compare Nemesys vs SwiftSegFinder
-    val actualTestNemesysSegmentation = listOf(
+    val testMessages = listOf(
         TestMessage(0,
             "081611b892473a80d6c641".fromHex(),
             listOf(
@@ -1355,7 +1380,7 @@ class TestNemesys {
 
 
     // To compare SwiftSegFinder vs Nemesys vs Netzob
-    val testMessages = listOf(
+    val actualNemesysSegmentation = listOf(
         TestMessage(70,
             "01043d4ab5ac040101030a6b6b77697a666e76707a05110208408dc3e9c070848e03057574796a6c0204c446bfdb030a726b74686977737a73740208406dedb6e2a75c80051d0401010401000104e7f6e3850204441f15930204c2456b6e030365666e0304747a657905060101a6040100030371697a040101010415b085d30301720401010102fab104010103046f676879".fromHex(),
             listOf(
@@ -6144,5 +6169,12 @@ class TestNemesys {
                 SSFSegment(127, SSFField.UNKNOWN),
             )
         ),
+    )
+
+    // group of messages with a similar structure
+    val nemesysMessageGroups = listOf(
+        MessageGroup(0, TestMessageSamples.testMessages.withIndex().filter { it.index in (70..79) }.map { it.value }),
+        MessageGroup(1, TestMessageSamples.testMessages.withIndex().filter { it.index in (70..119) }.map { it.value }),
+        MessageGroup(2, TestMessageSamples.testMessages.withIndex().filter { it.index in (70..169) }.map { it.value })
     )
 }

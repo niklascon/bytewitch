@@ -11127,15 +11127,16 @@ object TestMessageSamples {
         )
     )
 
-    val messageGroups = listOf(
-        /*
+    val messageGroupsEntropyVsNemesys = listOf(
         MessageGroup(0, TestMessageSamples.testMessages.subList(19, 19 + 5)), // To test entropy vs nemesys
         MessageGroup(1, TestMessageSamples.testMessages.subList(19, 19 + 10)), // To test entropy vs nemesys
         MessageGroup(2, TestMessageSamples.testMessages.subList(19, 19 + 50)) // To test entropy vs nemesys
-        */
-        MessageGroup(0, TestMessageSamples.testMessages.subList(70, 70 + 10)), // To test SwiftSegFinder vs Nemesys vs Netyob
-        MessageGroup(1, TestMessageSamples.testMessages.subList(70, 70 + 50)), // To test SwiftSegFinder vs Nemesys vs Netyob
-        MessageGroup(2, TestMessageSamples.testMessages.subList(70, 70 + 100)) // To test SwiftSegFinder vs Nemesys vs Netyob
+    )
+
+    val messageGroupsSwiftSegFinderVsNemesysVsNetzob = listOf(
+        MessageGroup(0, TestMessageSamples.testMessages.subList(70, 70 + 10)), // To test SwiftSegFinder vs Nemesys vs Netzob
+        MessageGroup(1, TestMessageSamples.testMessages.subList(70, 70 + 50)), // To test SwiftSegFinder vs Nemesys vs Netzob
+        MessageGroup(2, TestMessageSamples.testMessages.subList(70, 70 + 100)) // To test SwiftSegFinder vs Nemesys vs Netzob
     )
 
     // test sequence alignment

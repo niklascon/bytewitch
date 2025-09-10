@@ -7,7 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class TestNetzob {
-    /*@Test
+    @Test
     fun testNetzobMessageGroups() {
         netzobMessageGroups.forEach { group ->
             println("=== Testing Netzob Group ${group.typeId} ===")
@@ -22,11 +22,11 @@ class TestNetzob {
                 )
             }
 
-            EvaluationHelper.printFinalScore() // TODO hier das assertTrue rausnehmen, wenn man es evaluieren will
+            EvaluationHelper.printFinalScore()
         }
 
-        assertTrue(false, "F1 score should be at least 80%")
-    }*/
+        assertTrue(false)
+    }
 
 
     /*val actualNetzobSegmentation = listOf(

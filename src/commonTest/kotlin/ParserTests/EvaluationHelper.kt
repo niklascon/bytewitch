@@ -52,12 +52,12 @@ object EvaluationHelper {
         val recall = tp.toDouble() / expectedSegments.size
         val f1 = 2 * precision * recall / (precision + recall).coerceAtLeast(1e-9)
 
-        println("----- testSegmentParsing$testNumber -----")
+        /*println("----- testSegmentParsing$testNumber -----")
         println("True Positives: $tp")
         println("False Positives: $fp")
         println("Precision: ${(precision * 100).toInt()}%")
         println("Recall: ${(recall * 100).toInt()}%")
-        println("F1 Score: ${(f1 * 100).toInt()}%")
+        println("F1 Score: ${(f1 * 100).toInt()}%")*/
     }
 
     // use Nemesys FMS-Score
@@ -136,8 +136,6 @@ object EvaluationHelper {
         totalTP = 0
         totalFP = 0
         totalFN = 0
-
-        assertTrue(false, "F1 score should be at least 80%")
     }
 
     fun printFinalScoreSequenceAlignment() {
@@ -246,10 +244,10 @@ object EvaluationHelper {
         totalExpectedItems += expected.size
         totalRuntime += elapsedMs
 
-        println("----- testSegmentWiseAlignment$testNumber -----")
+        /*println("----- testSegmentWiseAlignment$testNumber -----")
         println("Correct segment pairs: ${correct.size} / ${expected.size}")
         println("Segment-level accuracy: ${(acc * 100).toInt()}%")
-        println("Runtime: ${elapsedMs} ms")
+        println("Runtime: ${elapsedMs} ms")*/
     }
 
 
@@ -397,9 +395,9 @@ object EvaluationHelper {
 
         val accuracy = correctBytes.toDouble() / totalBytes.coerceAtLeast(1)
 
-        println("----- testByteWiseAlignment$testNumber -----")
+        /*println("----- testByteWiseAlignment$testNumber -----")
         println("Correctly aligned bytes: $correctBytes / $totalBytes")
-        println("Byte-level accuracy: ${(accuracy * 100).toInt()}%")
+        println("Byte-level accuracy: ${(accuracy * 100).toInt()}%")*/
     }
 
 
