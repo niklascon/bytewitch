@@ -265,9 +265,7 @@ fun mainDecode(isLiveDecoding: Boolean) {
                     SSFParsedMessage(listOf(), bytes, i) // for float view if showSSFContent is set to false
 
                 decodeSingleMessage(bytes, i, showSSFContent = bytes.size <= byteLimitSSFContent)
-            }
-
-            if (inputText.isEmpty()) { // if no bytes are set in textview and not even a half byte is set so delete output
+            } else if (inputText.isEmpty()) { // if no bytes are set in textview and not even a half byte is set so delete output
                 // delete from output view
                 val output = document.getElementById("output") as HTMLDivElement
                 val target = document.getElementById("message-output-$i") as? HTMLDivElement
